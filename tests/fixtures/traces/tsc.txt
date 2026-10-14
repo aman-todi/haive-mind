@@ -1,0 +1,1 @@
+web/src/api.ts(3,14): error TS2339: Property 'jsn' does not exist on type 'Response'.

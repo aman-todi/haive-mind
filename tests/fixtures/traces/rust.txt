@@ -1,0 +1,11 @@
+thread 'main' panicked at src/main.rs:5:9:
+index out of bounds: the len is 3 but the index is 5
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/abc123/library/std/src/panicking.rs:597:5
+   1: core::panicking::panic_bounds_check
+             at /rustc/abc123/library/core/src/panicking.rs:208:5
+   2: myapp::compute
+             at ./src/main.rs:5:9
+   3: myapp::main
+             at ./src/main.rs:10:5

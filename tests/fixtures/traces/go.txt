@@ -1,0 +1,10 @@
+panic: runtime error: index out of range [5] with length 3
+
+goroutine 1 [running]:
+main.(*Job).Run(0xc000012345)
+	/home/dev/valuation/cmd/worker/main.go:10 +0x1d
+main.main()
+	/home/dev/valuation/cmd/worker/main.go:16 +0x25
+runtime.main()
+	/usr/local/go/src/runtime/proc.go:250 +0x207
+exit status 2

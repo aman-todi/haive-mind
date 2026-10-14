@@ -1,0 +1,84 @@
+"""Embeddings. Default: fastembed running ``jinaai/jina-embeddings-v2-base-code`` locally (768-d).
+
+``HashEmbedder`` is a deterministic, dependency-free stand-in for tests and offline runs.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import re
+from collections.abc import Iterator
+
+from haive.types import Chunk, Embedder
+
+
+class FastEmbedder:
+    def __init__(
+        self, model: str = "jinaai/jina-embeddings-v2-base-code", dim: int = 768, batch_size: int = 32
+    ):
+        self.model_name = model
+        self.dim = dim
+        self.batch_size = batch_size
+        self._model = None
+
+    @property
+    def model(self):
+        if self._model is None:
+            from fastembed import TextEmbedding
+
+            self._model = TextEmbedding(model_name=self.model_name)
+        return self._model
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [v.tolist() for v in self.model.embed(texts, batch_size=self.batch_size)]
+
+    def embed_query(self, text: str) -> list[float]:
+        return next(iter(self.model.query_embed(text))).tolist()
+
+
+_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
+
+
+def _tokens(text: str) -> Iterator[str]:
+    for tok in _TOKEN.findall(text):
+        low = tok.lower()
+        yield low
+        # split camelCase and snake_case so "getUser" matches "get user"
+        for part in re.findall(r"[a-z]+|[A-Z][a-z]*|\d+", tok):
+            if part.lower() != low:
+                yield part.lower()
+
+
+class HashEmbedder:
+    """Bag-of-tokens feature hashing. Deterministic; good enough for tests and ablations."""
+
+    def __init__(self, dim: int = 768):
+        self.dim = dim
+
+    def _vec(self, text: str) -> list[float]:
+        v = [0.0] * self.dim
+        for tok in _tokens(text):
+            h = int.from_bytes(hashlib.blake2b(tok.encode(), digest_size=8).digest(), "little")
+            v[h % self.dim] += 1.0 if (h >> 63) & 1 else -1.0
+        norm = math.sqrt(sum(x * x for x in v)) or 1.0
+        return [x / norm for x in v]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vec(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._vec(text)
+
+
+def embed_chunks(embedder: Embedder, chunks: list[Chunk], batch: int = 64) -> list[list[float]]:
+    out: list[list[float]] = []
+    for i in range(0, len(chunks), batch):
+        out += embedder.embed_documents([c.embed_text for c in chunks[i : i + batch]])
+    return out
+
+
+def make_embedder(model: str, dim: int) -> Embedder:
+    if model == "hash":
+        return HashEmbedder(dim)
+    return FastEmbedder(model, dim)

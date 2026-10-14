@@ -1,0 +1,6 @@
+=================================================================
+==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000014 at pc 0x0000004f5 bp 0x7ffd
+READ of size 4 at 0x602000000014 thread T0
+    #0 0x4f5a1b in sum_items /home/dev/proj/src/items.c:14:12
+    #1 0x4f5c22 in main /home/dev/proj/src/main.c:30:5
+    #2 0x7f1e2a in __libc_start_main /build/glibc/csu/libc-start.c:308:16

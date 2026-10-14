@@ -1,0 +1,5 @@
+src/items.c: In function 'sum_items':
+src/items.c:14:12: error: 'count' undeclared (first use in this function)
+   14 |     return count;
+      |            ^~~~~
+src/items.c:20:5: warning: unused variable 'x' [-Wunused-variable]

@@ -1,0 +1,4 @@
+Unhandled exception. System.NullReferenceException: Object reference not set to an instance of an object.
+   at App.Services.Svc.Run() in /src/App/Services/Svc.cs:line 12
+   at App.Program.Main(String[] args) in /src/App/Program.cs:line 5
+   at System.Threading.Tasks.Task.Execute()

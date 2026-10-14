@@ -1,0 +1,2 @@
+app/valuation/dcf.py:5: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+Found 1 error in 1 file (checked 3 source files)

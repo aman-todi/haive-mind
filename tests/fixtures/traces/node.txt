@@ -1,0 +1,6 @@
+/app/web/src/api.ts:2
+TypeError: Cannot read properties of undefined (reading 'json')
+    at loadUser (/app/web/src/api.ts:3:14)
+    at async Promise.all (index 0)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at Object.<anonymous> (/app/node_modules/vite/dist/node/cli.js:10:3)

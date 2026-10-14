@@ -1,0 +1,7 @@
+Exception in thread "main" java.lang.IllegalStateException: billing failed
+	at com.acme.Billing.total(Billing.java:7)
+	at com.acme.Main.main(Main.java:12)
+Caused by: java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 3
+	at com.acme.Billing.total(Billing.java:6)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1541)
+	... 1 more

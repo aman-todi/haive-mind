@@ -1,0 +1,3 @@
+Error: user not found
+    at loadUser (/srv/web/dist/api.js:12:11)
+    at main (/srv/web/dist/index.js:4:3)
