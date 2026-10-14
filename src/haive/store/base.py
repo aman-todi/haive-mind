@@ -56,11 +56,17 @@ def clean_metadata(chunk: Chunk) -> dict[str, Any]:
 
 def hit_from(id_: str, score: float, meta: dict[str, Any]) -> Hit:
     return Hit(
-        id=id_, score=float(score), repo=meta.get("repo", ""), path=meta.get("path", ""),
-        kind=meta.get("kind", "code"), language=meta.get("language", ""), symbol=meta.get("symbol", ""),
-        start_line=int(meta.get("start_line", 0) or 0), end_line=int(meta.get("end_line", 0) or 0),
+        id=id_,
+        score=float(score),
+        repo=meta.get("repo", ""),
+        path=meta.get("path", ""),
+        kind=meta.get("kind", "code"),
+        language=meta.get("language", ""),
+        symbol=meta.get("symbol", ""),
+        start_line=int(meta.get("start_line", 0) or 0),
+        end_line=int(meta.get("end_line", 0) or 0),
         text=meta.get("text", ""),
-    )  # fmt: skip
+    )
 
 
 class MemoryStore:

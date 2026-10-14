@@ -57,9 +57,20 @@ def _def_types(language: str) -> set[str]:
     spec = SPECS.get(language)
     if not spec:
         return set()
-    return spec.defs | spec.members | {"function_definition", "method_definition", "arrow_function",
-                                        "function_expression", "function_item", "method_declaration",
-                                        "constructor_declaration", "function_declaration"}  # fmt: skip
+    return (
+        spec.defs
+        | spec.members
+        | {
+            "function_definition",
+            "method_definition",
+            "arrow_function",
+            "function_expression",
+            "function_item",
+            "method_declaration",
+            "constructor_declaration",
+            "function_declaration",
+        }
+    )
 
 
 def enclosing(root: Path, rel: str, line: int) -> tuple[int, int, str] | None:

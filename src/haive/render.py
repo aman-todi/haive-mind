@@ -57,8 +57,11 @@ def render_answer(console: Console, answer: Answer, meta: dict[str, Any] | None 
         for c in s.claims:
             console.print("  • " + claim_markup(c))
     if answer.suggested_fix and answer.suggested_fix.diff.strip():
-        label = "Suggested fix (approximate: context lines did not match the file)" if (
-            answer.suggested_fix.approximate) else "Suggested fix (not applied)"  # fmt: skip
+        label = (
+            "Suggested fix (approximate: context lines did not match the file)"
+            if (answer.suggested_fix.approximate)
+            else "Suggested fix (not applied)"
+        )
         console.print(f"\n[bold]{label}[/]")
         console.print(Syntax(answer.suggested_fix.diff, "diff", theme="ansi_dark", word_wrap=True))
     if answer.followups:

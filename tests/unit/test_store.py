@@ -62,9 +62,21 @@ def test_pinecone_store_with_mock_client(embedder):
     sent = index.upsert.call_args.kwargs["vectors"]
     assert len(sent) == 3 and len(sent[0]["values"]) == 768 and sent[0]["metadata"]["repo"] == "a"
     index.query.return_value = {
-        "matches": [{"id": "a:x.py:1", "score": 0.9, "metadata": {"repo": "a", "path": "x.py", "kind": "code",
-                                                               "start_line": 1, "end_line": 1, "text": "t"}}]
-    }  # fmt: skip
+        "matches": [
+            {
+                "id": "a:x.py:1",
+                "score": 0.9,
+                "metadata": {
+                    "repo": "a",
+                    "path": "x.py",
+                    "kind": "code",
+                    "start_line": 1,
+                    "end_line": 1,
+                    "text": "t",
+                },
+            }
+        ]
+    }
     hits = store.search("q", 5, {"repo": ["a"], "kind": ["code"]})
     assert index.query.call_args.kwargs["filter"] == {"repo": {"$in": ["a"]}, "kind": {"$in": ["code"]}}
     assert hits[0].path == "x.py" and hits[0].score == 0.9

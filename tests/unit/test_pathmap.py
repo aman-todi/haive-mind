@@ -5,9 +5,14 @@ from haive.types import Frame
 
 def mapper(roots, scope=None):
     files = [
-        ("v", "app/valuation/dcf.py"), ("v", "app/server.py"), ("v", "web/src/api.ts"), ("v", "web/src/index.ts"),
-        ("v", "src/main/java/com/acme/Billing.java"), ("o", "app/server.py"), ("v", "cmd/worker/main.go"),
-    ]  # fmt: skip
+        ("v", "app/valuation/dcf.py"),
+        ("v", "app/server.py"),
+        ("v", "web/src/api.ts"),
+        ("v", "web/src/index.ts"),
+        ("v", "src/main/java/com/acme/Billing.java"),
+        ("o", "app/server.py"),
+        ("v", "cmd/worker/main.go"),
+    ]
     return PathMapper(files, roots, scope)
 
 

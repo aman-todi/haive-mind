@@ -53,9 +53,11 @@ class ChromaStore:
         if n == 0:
             return []
         res = self.col.query(
-            query_embeddings=[self.embedder.embed_query(query)], n_results=min(k, n), where=chroma_where(filter),
+            query_embeddings=[self.embedder.embed_query(query)],
+            n_results=min(k, n),
+            where=chroma_where(filter),
             include=["metadatas", "documents", "distances"],
-        )  # fmt: skip
+        )
         out = []
         for id_, meta, doc, dist in zip(
             res["ids"][0], res["metadatas"][0], res["documents"][0], res["distances"][0], strict=True

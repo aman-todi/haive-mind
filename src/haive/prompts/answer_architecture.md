@@ -1,0 +1,2 @@
+<!-- version: 1 -->
+Answer template (architecture): sections "Components" (each service/package and its role), "How they connect" (use the connection map: shared env vars, compose service names, routes defined in one repo and called in another), "Data flow", and "Deploy path" (CI workflows, containers, infrastructure). Cite files for each claim. Profile and connection-map evidence lists file paths and lines; cite those files only if they also appear as evidence headers.

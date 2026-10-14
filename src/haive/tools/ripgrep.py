@@ -117,11 +117,17 @@ def _py(pattern, root, fixed, ignore_case, word, max_per_repo, globs) -> list[tu
 
 
 DEF_TEMPLATES = [
-    r"\bdef\s+{s}\b", r"\bclass\s+{s}\b", r"\bfunction\*?\s+{s}\b", r"\b(?:const|let|var)\s+{s}\s*=",
-    r"\bfunc\s+(?:\([^)]*\)\s*)?{s}\b", r"\bfn\s+{s}\b", r"\b(?:struct|enum|trait|interface|type|record)\s+{s}\b",
-    r"\b{s}\s*[:=]\s*(?:async\s+)?(?:function|\()", r"^\s*(?:export\s+)?(?:async\s+)?{s}\s*\(",
+    r"\bdef\s+{s}\b",
+    r"\bclass\s+{s}\b",
+    r"\bfunction\*?\s+{s}\b",
+    r"\b(?:const|let|var)\s+{s}\s*=",
+    r"\bfunc\s+(?:\([^)]*\)\s*)?{s}\b",
+    r"\bfn\s+{s}\b",
+    r"\b(?:struct|enum|trait|interface|type|record)\s+{s}\b",
+    r"\b{s}\s*[:=]\s*(?:async\s+)?(?:function|\()",
+    r"^\s*(?:export\s+)?(?:async\s+)?{s}\s*\(",
     r"[\w<>\[\],\s]+\s+{s}\s*\([^;]*\)\s*(?:\{{|$|throws)",
-]  # fmt: skip
+]
 
 
 def find_definition(symbol: str, roots: dict[str, Path], max_per_repo: int = 10) -> list[Match]:

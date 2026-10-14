@@ -16,9 +16,15 @@ class PineconeError(RuntimeError):
 
 class PineconeStore:
     def __init__(
-        self, embedder: Embedder, index_name: str = "haive", cloud: str = "aws", region: str = "us-east-1",
-        *, client: Any = None, api_key: str | None = None,
-    ):  # fmt: skip
+        self,
+        embedder: Embedder,
+        index_name: str = "haive",
+        cloud: str = "aws",
+        region: str = "us-east-1",
+        *,
+        client: Any = None,
+        api_key: str | None = None,
+    ):
         self.embedder = embedder
         self.index_name = index_name
         self.cloud = cloud
@@ -42,9 +48,11 @@ class PineconeStore:
             from pinecone import ServerlessSpec
 
             self.pc.create_index(
-                name=self.index_name, dimension=self.embedder.dim, metric="cosine",
+                name=self.index_name,
+                dimension=self.embedder.dim,
+                metric="cosine",
                 spec=ServerlessSpec(cloud=self.cloud, region=self.region),
-            )  # fmt: skip
+            )
             created = True
         desc = self.pc.describe_index(self.index_name)
         dim = getattr(desc, "dimension", None) or (desc.get("dimension") if isinstance(desc, dict) else None)

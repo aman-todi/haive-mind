@@ -18,9 +18,14 @@ Boundary = tuple[int, str]  # (0-based line index, symbol)
 
 
 def _segments(
-    repo: str, path: str, lines: list[str], kind: str, language: str, bounds: list[Boundary],
+    repo: str,
+    path: str,
+    lines: list[str],
+    kind: str,
+    language: str,
+    bounds: list[Boundary],
     preamble: str = "<preamble>",
-) -> list[Chunk]:  # fmt: skip
+) -> list[Chunk]:
     if not bounds:
         return _whole_or_windows(repo, path, lines, kind, language, "")
     bounds = sorted(bounds)

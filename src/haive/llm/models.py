@@ -79,9 +79,14 @@ class LLM:
     """Entry point for all LLM calls. ``factory`` builds a model from an id (tests inject fakes)."""
 
     def __init__(
-        self, cfg: Config, db: DB | None = None, factory: Callable[[str], ChatModel] | None = None,
-        *, sleep: Callable[[float], None] = time.sleep, limiter: RateLimiter | None = None,
-    ):  # fmt: skip
+        self,
+        cfg: Config,
+        db: DB | None = None,
+        factory: Callable[[str], ChatModel] | None = None,
+        *,
+        sleep: Callable[[float], None] = time.sleep,
+        limiter: RateLimiter | None = None,
+    ):
         self.cfg = cfg
         self.db = db
         self.factory = factory or (lambda mid: get_model(mid, cfg))

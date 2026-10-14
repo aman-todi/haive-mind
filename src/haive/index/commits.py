@@ -44,9 +44,18 @@ def read_commits(root: Path, repo: str, n: int, rev: str | None = None) -> list[
     out = []
     for c in git.log(root, n=n, rev=rev, numstat=True):
         out.append(
-            CommitInfo(repo=repo, sha=c["sha"], date=_utc(c["date"]), author=c["author"], subject=c["subject"],
-                       body=c["body"], files=c["files"], insertions=c["insertions"], deletions=c["deletions"])
-        )  # fmt: skip
+            CommitInfo(
+                repo=repo,
+                sha=c["sha"],
+                date=_utc(c["date"]),
+                author=c["author"],
+                subject=c["subject"],
+                body=c["body"],
+                files=c["files"],
+                insertions=c["insertions"],
+                deletions=c["deletions"],
+            )
+        )
     return out
 
 
@@ -69,9 +78,17 @@ def commit_text(ci: CommitInfo) -> str:
 def commit_chunk(ci: CommitInfo) -> Chunk:
     text = commit_text(ci)
     return Chunk(
-        id=commit_id(ci.repo, ci.sha), repo=ci.repo, path="", kind="commit", language="", symbol=ci.sha[:12],
-        start_line=0, end_line=0, text=text, content_hash=ci.sha[:12],
-    )  # fmt: skip
+        id=commit_id(ci.repo, ci.sha),
+        repo=ci.repo,
+        path="",
+        kind="commit",
+        language="",
+        symbol=ci.sha[:12],
+        start_line=0,
+        end_line=0,
+        text=text,
+        content_hash=ci.sha[:12],
+    )
 
 
 def attach_small_diff(root: Path, ci: CommitInfo, small_diff_lines: int) -> None:

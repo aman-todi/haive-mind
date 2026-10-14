@@ -16,22 +16,75 @@ from haive.index.discover import FileInfo, read_text
 from haive.types import RepoProfile
 
 KNOWN_FRAMEWORKS = {
-    "fastapi": "FastAPI", "flask": "Flask", "django": "Django", "starlette": "Starlette", "streamlit": "Streamlit",
-    "sqlalchemy": "SQLAlchemy", "pydantic": "Pydantic", "celery": "Celery", "langchain": "LangChain",
-    "langgraph": "LangGraph", "pytest": "pytest", "typer": "Typer", "click": "Click", "pandas": "pandas",
-    "express": "Express", "next": "Next.js", "react": "React", "vue": "Vue", "svelte": "Svelte",
-    "@sveltejs/kit": "SvelteKit", "@nestjs/core": "NestJS", "koa": "Koa", "fastify": "Fastify", "hono": "Hono",
-    "prisma": "Prisma", "@prisma/client": "Prisma", "jest": "Jest", "vitest": "Vitest", "vite": "Vite",
-    "axios": "axios", "tailwindcss": "Tailwind", "electron": "Electron", "react-native": "React Native",
-    "github.com/gin-gonic/gin": "Gin", "github.com/labstack/echo": "Echo", "github.com/gofiber/fiber": "Fiber",
-    "actix-web": "Actix Web", "axum": "Axum", "rocket": "Rocket", "tokio": "Tokio", "serde": "Serde",
-    "Microsoft.AspNetCore": "ASP.NET Core", "Microsoft.EntityFrameworkCore": "Entity Framework Core",
+    "fastapi": "FastAPI",
+    "flask": "Flask",
+    "django": "Django",
+    "starlette": "Starlette",
+    "streamlit": "Streamlit",
+    "sqlalchemy": "SQLAlchemy",
+    "pydantic": "Pydantic",
+    "celery": "Celery",
+    "langchain": "LangChain",
+    "langgraph": "LangGraph",
+    "pytest": "pytest",
+    "typer": "Typer",
+    "click": "Click",
+    "pandas": "pandas",
+    "express": "Express",
+    "next": "Next.js",
+    "react": "React",
+    "vue": "Vue",
+    "svelte": "Svelte",
+    "@sveltejs/kit": "SvelteKit",
+    "@nestjs/core": "NestJS",
+    "koa": "Koa",
+    "fastify": "Fastify",
+    "hono": "Hono",
+    "prisma": "Prisma",
+    "@prisma/client": "Prisma",
+    "jest": "Jest",
+    "vitest": "Vitest",
+    "vite": "Vite",
+    "axios": "axios",
+    "tailwindcss": "Tailwind",
+    "electron": "Electron",
+    "react-native": "React Native",
+    "github.com/gin-gonic/gin": "Gin",
+    "github.com/labstack/echo": "Echo",
+    "github.com/gofiber/fiber": "Fiber",
+    "actix-web": "Actix Web",
+    "axum": "Axum",
+    "rocket": "Rocket",
+    "tokio": "Tokio",
+    "serde": "Serde",
+    "Microsoft.AspNetCore": "ASP.NET Core",
+    "Microsoft.EntityFrameworkCore": "Entity Framework Core",
     "org.springframework.boot": "Spring Boot",
-}  # fmt: skip
+}
 
-ENTRY_NAMES = {"main.py", "__main__.py", "app.py", "manage.py", "wsgi.py", "asgi.py", "main.go", "main.rs",
-               "index.js", "index.ts", "server.js", "server.ts", "app.js", "app.ts", "main.ts", "main.js",
-               "Program.cs", "Main.java", "Application.java", "main.c", "main.cpp"}  # fmt: skip
+ENTRY_NAMES = {
+    "main.py",
+    "__main__.py",
+    "app.py",
+    "manage.py",
+    "wsgi.py",
+    "asgi.py",
+    "main.go",
+    "main.rs",
+    "index.js",
+    "index.ts",
+    "server.js",
+    "server.ts",
+    "app.js",
+    "app.ts",
+    "main.ts",
+    "main.js",
+    "Program.cs",
+    "Main.java",
+    "Application.java",
+    "main.c",
+    "main.cpp",
+}
 
 ENV_PATTERNS = [
     r"os\.environ\[\s*['\"]([A-Z][A-Z0-9_]+)['\"]",
@@ -158,14 +211,27 @@ def _compose_services(path: str, text: str) -> list[dict[str, Any]]:
     for name, svc in data["services"].items():
         svc = svc or {}
         env = svc.get("environment") or {}
+        if isinstance(env, dict):
+            pairs = [(str(k), str(v)) for k, v in env.items() if v is not None]
+        else:
+            pairs = [tuple(str(e).split("=", 1)) for e in env if "=" in str(e)]
         env_names = list(env) if isinstance(env, dict) else [str(e).split("=", 1)[0] for e in env]
+        env_urls = {k: v for k, v in pairs if "://" in v}
         depends = svc.get("depends_on") or []
         out.append(
-            {"name": name, "file": path, "image": svc.get("image"),
-             "build": svc.get("build") if isinstance(svc.get("build"), str) else (svc.get("build") or {}).get("context"),
-             "ports": [str(p) for p in svc.get("ports", []) or []], "env": env_names,
-             "depends_on": list(depends) if isinstance(depends, (list, dict)) else []}
-        )  # fmt: skip
+            {
+                "name": name,
+                "file": path,
+                "image": svc.get("image"),
+                "build": svc.get("build")
+                if isinstance(svc.get("build"), str)
+                else (svc.get("build") or {}).get("context"),
+                "ports": [str(p) for p in svc.get("ports", []) or []],
+                "env": env_names,
+                "env_urls": env_urls,
+                "depends_on": list(depends) if isinstance(depends, (list, dict)) else [],
+            }
+        )
     return out
 
 

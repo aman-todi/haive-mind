@@ -22,9 +22,17 @@ WINDOW_LINES = 60
 WINDOW_OVERLAP = 10
 
 TS_NAME = {
-    "python": "python", "javascript": "javascript", "typescript": "typescript", "tsx": "tsx", "go": "go",
-    "rust": "rust", "java": "java", "c": "c", "cpp": "cpp", "csharp": "csharp",
-}  # fmt: skip
+    "python": "python",
+    "javascript": "javascript",
+    "typescript": "typescript",
+    "tsx": "tsx",
+    "go": "go",
+    "rust": "rust",
+    "java": "java",
+    "c": "c",
+    "cpp": "cpp",
+    "csharp": "csharp",
+}
 
 
 @dataclass
@@ -35,9 +43,17 @@ class LangSpec:
     wrappers: set[str] = field(default_factory=set)  # descended into transparently
 
 
-_JS_DEFS = {"function_declaration", "generator_function_declaration", "class_declaration", "lexical_declaration",
-            "variable_declaration", "abstract_class_declaration", "interface_declaration",
-            "type_alias_declaration", "enum_declaration"}  # fmt: skip
+_JS_DEFS = {
+    "function_declaration",
+    "generator_function_declaration",
+    "class_declaration",
+    "lexical_declaration",
+    "variable_declaration",
+    "abstract_class_declaration",
+    "interface_declaration",
+    "type_alias_declaration",
+    "enum_declaration",
+}
 
 SPECS: dict[str, LangSpec] = {
     "python": LangSpec(
@@ -45,13 +61,26 @@ SPECS: dict[str, LangSpec] = {
         {"class_definition"},
         {"function_definition", "decorated_definition"},
     ),
-    "javascript": LangSpec(_JS_DEFS, {"class_declaration", "class"}, {"method_definition"}, {"export_statement"}),
+    "javascript": LangSpec(
+        _JS_DEFS, {"class_declaration", "class"}, {"method_definition"}, {"export_statement"}
+    ),
     "typescript": LangSpec(
-        _JS_DEFS, {"class_declaration", "abstract_class_declaration"}, {"method_definition"}, {"export_statement"}
+        _JS_DEFS,
+        {"class_declaration", "abstract_class_declaration"},
+        {"method_definition"},
+        {"export_statement"},
     ),
     "go": LangSpec({"function_declaration", "method_declaration", "type_declaration"}),
     "rust": LangSpec(
-        {"function_item", "impl_item", "struct_item", "enum_item", "trait_item", "mod_item", "macro_definition"},
+        {
+            "function_item",
+            "impl_item",
+            "struct_item",
+            "enum_item",
+            "trait_item",
+            "mod_item",
+            "macro_definition",
+        },
         {"impl_item", "trait_item", "mod_item"},
         {"function_item", "function_signature_item"},
     ),
@@ -62,19 +91,30 @@ SPECS: dict[str, LangSpec] = {
     ),
     "c": LangSpec({"function_definition", "struct_specifier", "type_definition", "enum_specifier"}),
     "cpp": LangSpec(
-        {"function_definition", "class_specifier", "struct_specifier", "template_declaration", "enum_specifier"},
+        {
+            "function_definition",
+            "class_specifier",
+            "struct_specifier",
+            "template_declaration",
+            "enum_specifier",
+        },
         {"class_specifier", "struct_specifier"},
         {"function_definition", "template_declaration"},
         {"namespace_definition", "declaration_list", "linkage_specification"},
     ),
     "csharp": LangSpec(
-        {"class_declaration", "interface_declaration", "struct_declaration", "record_declaration",
-         "enum_declaration"},
+        {
+            "class_declaration",
+            "interface_declaration",
+            "struct_declaration",
+            "record_declaration",
+            "enum_declaration",
+        },
         {"class_declaration", "interface_declaration", "struct_declaration", "record_declaration"},
         {"method_declaration", "constructor_declaration", "property_declaration"},
         {"namespace_declaration", "file_scoped_namespace_declaration", "declaration_list"},
     ),
-}  # fmt: skip
+}
 SPECS["tsx"] = SPECS["typescript"]
 
 _FUNC_VALUES = {"arrow_function", "function_expression", "function", "class", "generator_function"}
@@ -133,8 +173,14 @@ def node_name(node: Any) -> str:
         return _text(n)
     decl = node.child_by_field_name("declarator")  # C/C++ functions and typedefs
     while decl is not None:
-        if decl.type in ("identifier", "field_identifier", "type_identifier", "qualified_identifier",
-                         "destructor_name", "operator_name"):  # fmt: skip
+        if decl.type in (
+            "identifier",
+            "field_identifier",
+            "type_identifier",
+            "qualified_identifier",
+            "destructor_name",
+            "operator_name",
+        ):
             return _text(decl)
         nxt = decl.child_by_field_name("declarator")
         if nxt is None:
@@ -199,9 +245,18 @@ def _tokens(text: str) -> int:
 
 
 def window_chunks(
-    repo: str, path: str, lines: list[str], kind: str, language: str, *, start: int = 1,
-    symbol: str = "", context: str = "", size: int = WINDOW_LINES, overlap: int = WINDOW_OVERLAP,
-) -> list[Chunk]:  # fmt: skip
+    repo: str,
+    path: str,
+    lines: list[str],
+    kind: str,
+    language: str,
+    *,
+    start: int = 1,
+    symbol: str = "",
+    context: str = "",
+    size: int = WINDOW_LINES,
+    overlap: int = WINDOW_OVERLAP,
+) -> list[Chunk]:
     """Overlapping line windows. ``start`` is the 1-based line number of ``lines[0]``."""
     chunks: list[Chunk] = []
     if not lines:
@@ -223,7 +278,7 @@ def window_chunks(
                     context=context,
                     start_line=start + i,
                     end_line=start + i + len(seg) - 1,
-                )  # fmt: skip
+                )
             )
         if i + size >= len(lines):
             break
@@ -239,10 +294,31 @@ def _emit(repo, path, lines, language, s, e, symbol, context="") -> list[Chunk]:
         return []
     if _tokens(text) > MAX_TOKENS:
         size = max(20, MAX_TOKENS * CHARS_PER_TOKEN // max(1, (len(text) // max(1, len(seg)))))
-        return window_chunks(repo, path, seg, "code", language, start=s + 1, symbol=symbol, context=context,
-                             size=size, overlap=max(5, size // 8))  # fmt: skip
-    return [Chunk.make(repo, path, "code", text, language=language, symbol=symbol, context=context,
-                       start_line=s + 1, end_line=e + 1)]  # fmt: skip
+        return window_chunks(
+            repo,
+            path,
+            seg,
+            "code",
+            language,
+            start=s + 1,
+            symbol=symbol,
+            context=context,
+            size=size,
+            overlap=max(5, size // 8),
+        )
+    return [
+        Chunk.make(
+            repo,
+            path,
+            "code",
+            text,
+            language=language,
+            symbol=symbol,
+            context=context,
+            start_line=s + 1,
+            end_line=e + 1,
+        )
+    ]
 
 
 COMMENT_PREFIXES = {

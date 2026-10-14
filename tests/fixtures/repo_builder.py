@@ -221,9 +221,13 @@ class ApiClient:
 def _git(root: Path, *args: str, date: str | None = None) -> str:
     env = dict(os.environ)
     env.update(
-        GIT_AUTHOR_NAME="Dev", GIT_AUTHOR_EMAIL="dev@example.com", GIT_COMMITTER_NAME="Dev",
-        GIT_COMMITTER_EMAIL="dev@example.com", GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
-    )  # fmt: skip
+        GIT_AUTHOR_NAME="Dev",
+        GIT_AUTHOR_EMAIL="dev@example.com",
+        GIT_COMMITTER_NAME="Dev",
+        GIT_COMMITTER_EMAIL="dev@example.com",
+        GIT_CONFIG_GLOBAL="/dev/null",
+        GIT_CONFIG_NOSYSTEM="1",
+    )
     if date:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = date
     return subprocess.run(
@@ -272,9 +276,11 @@ def build_small_repo(root: Path, name: str = "other") -> Path:
     """A second repo for group/compare tests: calls the first repo's /valuations route."""
     root.mkdir(parents=True, exist_ok=True)
     _git(root, "init", "-q", "-b", "main")
-    write(root, {
-        "README.md": f"# {name}\n\nFrontend that requests valuations.\n",
-        "src/valuations.js": """const axios = require("axios");
+    write(
+        root,
+        {
+            "README.md": f"# {name}\n\nFrontend that requests valuations.\n",
+            "src/valuations.js": """const axios = require("axios");
 
 async function requestValuation(company) {
   const res = await axios.post(`${process.env.API_URL}/valuations`, company);
@@ -283,7 +289,8 @@ async function requestValuation(company) {
 
 module.exports = { requestValuation };
 """,
-        "docker-compose.yml": "services:\n  frontend:\n    image: node:20\n    environment:\n      API_URL: http://api:8000\n",
-    })  # fmt: skip
+            "docker-compose.yml": "services:\n  frontend:\n    image: node:20\n    environment:\n      API_URL: http://api:8000\n",
+        },
+    )
     commit(root, "Initial frontend", "2024-01-05T10:00:00+00:00")
     return root

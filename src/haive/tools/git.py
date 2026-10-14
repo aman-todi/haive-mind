@@ -16,9 +16,20 @@ from pathlib import Path
 from haive import paths
 
 READ_ONLY = {
-    "ls-files", "log", "blame", "rev-list", "rev-parse", "diff", "status", "show",
-    "merge-base", "cat-file", "remote", "config", "for-each-ref",
-}  # fmt: skip
+    "ls-files",
+    "log",
+    "blame",
+    "rev-list",
+    "rev-parse",
+    "diff-tree",
+    "status",
+    "show",
+    "merge-base",
+    "cat-file",
+    "remote",
+    "config",
+    "for-each-ref",
+}
 
 
 class GitError(RuntimeError):
@@ -83,10 +94,13 @@ def ls_files(root: Path | str) -> list[str]:
 
 
 def changed_since(root: Path | str, rev: str) -> list[str]:
-    """Paths changed between ``rev`` and the working tree, plus untracked files."""
-    out = _git(root, "diff", "--name-only", "-z", "--no-renames", rev).split("\0")
-    untracked = _git(root, "ls-files", "-z", "--others", "--exclude-standard").split("\0")
-    return sorted({p for p in out + untracked if p})
+    """Paths changed between ``rev`` and the working tree, plus untracked files.
+
+    Uses ``diff-tree`` (commit to commit) plus ``status``, never porcelain ``git diff``: that one
+    refreshes stale stat info and rewrites ``.git/index``, which would break the read-only guarantee.
+    """
+    out = _git(root, "diff-tree", "-r", "--name-only", "-z", "--no-renames", rev, "HEAD").split("\0")
+    return sorted({p for p in out if p} | set(status_paths(root)))
 
 
 def status_paths(root: Path | str) -> list[str]:
@@ -222,9 +236,18 @@ def _parse_log(out: str, with_patch: bool = False) -> list[dict]:
                     dels += int(d) if d.isdigit() else 0
                     files.append(f)
         commits.append(
-            {"sha": sha, "date": date_, "author": author, "subject": subject, "body": body.strip(),
-             "files": files, "insertions": ins, "deletions": dels, "patch": patch}
-        )  # fmt: skip
+            {
+                "sha": sha,
+                "date": date_,
+                "author": author,
+                "subject": subject,
+                "body": body.strip(),
+                "files": files,
+                "insertions": ins,
+                "deletions": dels,
+                "patch": patch,
+            }
+        )
     return commits
 
 
