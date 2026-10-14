@@ -13,12 +13,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from haive.db import DB
-from haive.index.discover import has_secret, is_secret_path
+from haive.index.discover import has_secret
 from haive.tools import git
 from haive.types import Chunk, CommitInfo, VectorStore
 
 MAX_FILES_LISTED = 25
-MAX_DIFF_CHARS = 4000
 
 
 @dataclass
@@ -70,8 +69,6 @@ def commit_text(ci: CommitInfo) -> str:
         parts.append(ci.body)
     parts.append(f"files: {', '.join(files)}{more}")
     parts.append(f"+{ci.insertions} -{ci.deletions}")
-    if ci.diff:
-        parts.append("diff:\n" + ci.diff)
     return "\n".join(parts)
 
 
@@ -91,19 +88,7 @@ def commit_chunk(ci: CommitInfo) -> Chunk:
     )
 
 
-def attach_small_diff(root: Path, ci: CommitInfo, small_diff_lines: int) -> None:
-    if ci.insertions + ci.deletions >= small_diff_lines:
-        return
-    if any(is_secret_path(f) for f in ci.files):
-        return
-    diff = git.show_patch(root, ci.sha, MAX_DIFF_CHARS)
-    if diff and not has_secret(diff):
-        ci.diff = diff
-
-
-def index_commits(
-    db: DB, store: VectorStore, repo: str, root: Path, max_commits: int = 1000, small_diff_lines: int = 200
-) -> CommitStats:
+def index_commits(db: DB, store: VectorStore, repo: str, root: Path, max_commits: int = 300) -> CommitStats:
     stats = CommitStats(head=git.head(root))
     if stats.head is None:
         return stats
@@ -126,14 +111,16 @@ def index_commits(
                 db.conn.execute("DELETE FROM chunks WHERE repo=? AND kind='commit'", (repo,))
         new = read_commits(root, repo, max_commits, rev=stats.head)
 
-    chunks: list[Chunk] = []
+    # Commit messages occasionally carry tokens; such commits keep their row but get no chunk.
+    chunks: dict[str, Chunk] = {}
     for ci in new:
-        attach_small_diff(root, ci, small_diff_lines)
-        chunks.append(commit_chunk(ci))
+        ch = commit_chunk(ci)
+        if not has_secret(ch.text):
+            chunks[ci.sha] = ch
     if chunks:
-        store.upsert(chunks)
+        store.upsert(list(chunks.values()))
     with db.conn:
-        for ci, ch in zip(new, chunks, strict=True):
+        for ci in new:
             db.conn.execute(
                 "INSERT OR REPLACE INTO commits VALUES(?,?,?,?,?,?,?,?)",
                 (
@@ -147,6 +134,9 @@ def index_commits(
                     ci.deletions,
                 ),
             )
+            ch = chunks.get(ci.sha)
+            if ch is None:
+                continue
             db.conn.execute(
                 "INSERT OR REPLACE INTO chunks VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (ch.id, repo, "", "commit", "", ch.symbol, 0, 0, ch.content_hash, ch.text),

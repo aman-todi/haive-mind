@@ -2,7 +2,7 @@
 
 A personal, local-first CLI that answers questions about, and helps debug, **your own git repositories**.
 
-haive indexes your repos (code, config, docs, and the last 1,000 commits) into a vector store, then runs a
+haive indexes your repos (code, config, docs, and the last 300 commit messages) into a vector store, then runs a
 LangGraph agent that mixes vector search with deterministic tools (ripgrep, file reads, git), optional
 web search, and several LLMs. Answers come with verified `file:line` citations, and every claim is
 labeled by where it came from:
@@ -100,9 +100,9 @@ haive index [names...] [--full]             incremental by default; --full rebui
 haive sync                                  git pull --ff-only on every repo, then incremental index
 haive status                                vector store, models per role, today's LLM usage, index health
 
-haive ask "<question>"  [-r REPO]... [-g GROUP]... [--web off|ask|auto] [--json] [--trace]
-haive debug [FILE|-]    [-q "extra question"] [-r/-g ...] [--web ...] [--json] [--trace]
-haive chat              [--resume ID] [-r/-g ...] [--web ...]
+haive ask "<question>"  [-r REPO]... [-g GROUP]... [--web off|ask|auto] [--json] [--trace] [--paid]
+haive debug [FILE|-]    [-q "extra question"] [-r/-g ...] [--web ...] [--json] [--trace] [--paid]
+haive chat              [--resume ID] [-r/-g ...] [--web ...] [--paid]
 haive threads           [--limit N]
 haive threads delete <ID>
 haive eval              [--suite FILE] [--ablation NAME] [--models ROLE=MODEL ...] [--setup-sample]
@@ -140,8 +140,7 @@ path = "~/code/intrinsic-valuation"
 valuation = ["valuation-backend", "valuation-frontend", "valuation-infra"]
 
 [index]
-max_commits = 1000
-small_diff_lines = 200        # include diff text only for commits with fewer changed lines
+max_commits = 300             # commit messages + file lists only (no diffs); git log -S/-L covers code history
 max_file_kb = 512
 extra_ignore = ["*.ipynb"]
 
@@ -154,9 +153,13 @@ model = "jinaai/jina-embeddings-v2-base-code"   # 768-d, runs locally via fastem
 batch_size = 8
 
 [models]                      # OpenRouter model IDs (any OpenAI-compatible endpoint works)
-fast = "google/gemma-4-26b-a4b-it:free"            # router, grader, rewrite, titles, per-repo summaries
+fast = "nvidia/nemotron-3-super-120b-a12b:free"    # router, grader, rewrite, expand planner, titles, summaries
 strong = "nvidia/nemotron-3-ultra-550b-a55b:free"  # answer, diagnose, synthesis
+strong_paid = "deepseek/deepseek-v4-pro-0813"      # used with --paid or use_paid_strong = true
+use_paid_strong = false
 fallback = ["openrouter/free"]
+requests_per_minute = 20      # client-side throttle
+max_retries = 2               # per model (honors Retry-After) before falling back
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]
@@ -164,6 +167,7 @@ max_llm_calls_per_question = 12
 max_grade_loops = 2
 max_answer_retries = 2
 daily_call_budget = 1000
+expand_with_tools = true      # the fast model picks expand tools; false = deterministic heuristics
 
 [web]
 mode = "ask"                  # off | ask | auto
@@ -173,19 +177,44 @@ provider = "auto"             # tavily if TAVILY_API_KEY is set, else duckduckgo
 Data lives in `~/.local/share/haive/`: `haive.db` (the index, not a copy of your code), `checkpoints.db`
 (chat state), `clones/`, and `chroma/`.
 
+## Models
+
+haive uses two OpenRouter roles, plus a fallback chain tried when a model keeps failing:
+
+| Role | Default (free) | Alternative (free) | Used for |
+|---|---|---|---|
+| fast | `nvidia/nemotron-3-super-120b-a12b:free` | `google/gemma-4-26b-a4b-it:free` | router, grader, query rewrite, expand planner, per-repo summaries, chat titles |
+| strong | `nvidia/nemotron-3-ultra-550b-a55b:free` | `poolside/laguna-s-2.1:free` | answers and debug diagnoses |
+| strong (paid, off by default) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98 per 1M tokens) | `anthropic/claude-sonnet-5.5` ($2 / $10) | the same, when you pass `--paid` or set `use_paid_strong = true` |
+
+Picks were checked against OpenRouter's live model list in October 2026; free models come and go, so
+check the list before relying on them and use `haive eval --models fast=… strong=…` to compare. A
+typical question makes 3 calls (router, grader, answer); `--paid` only changes the answer call, which
+costs about $0.01 with DeepSeek at ~15k tokens of evidence. Paid models also avoid the free tier's
+rate limits, and you can choose providers that don't train on prompts.
+
 ## How it works
 
 Indexing discovers files with `git ls-files` (so `.gitignore` always applies), skips binaries, lockfiles,
 generated files, and a **secrets denylist**, then chunks code with tree-sitter (one chunk per function,
 class, or method in Python, JS/TS, Go, Rust, Java, C, C++, and C#) and config/docs by structure (Markdown
 headings, YAML/JSON/TOML keys, compose services, Terraform blocks, SQL statements, shell functions).
-Chunks are content-addressed, so re-indexing only re-embeds what changed. Commits are indexed with their
-messages, and with diffs when they're small.
+Chunks are content-addressed, so re-indexing only re-embeds what changed. Commits are indexed by message,
+author, date, and changed files; code-level history comes from `git log -S/-L` at question time.
 
 Questions go through a LangGraph state machine: freshness check → router (fast model) → intent-specific
 retrieval (code first: symbols, ripgrep, git; vectors after) → grader loop (expand, rewrite, or web) →
 answer (strong model, structured output) → verification in code → finalize. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the graph and data flow.
+
+**LangGraph** runs the whole flow: a `StateGraph` with conditional edges, `Send` fan-out for compare and
+architecture, `interrupt`/`Command` for clarification and web approval, a `SqliteSaver` checkpointer for
+resumable chats, and a tool-calling subgraph (`ToolNode` + `tools_condition`) for the expand step.
+**LangChain** provides the pieces around it: `init_chat_model` with an `InMemoryRateLimiter`,
+`.with_fallbacks()` across models, LCEL structured-output chains (native tool calling, then
+`PydanticOutputParser` with an error-fed repair retry), `ChatPromptTemplate`s with a `MessagesPlaceholder`
+for chat history, a callback handler that meters calls and records usage, `@tool`s over the code tools,
+`Embeddings` over fastembed, and the `langchain-pinecone` / `langchain-chroma` vector stores.
 
 ## Privacy
 

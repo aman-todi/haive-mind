@@ -23,13 +23,22 @@
 
 ## Verified so far
 
-- `uv run pytest`: 130 tests, all passing on Python 3.13 and 3.11. Tests never touch the network.
+- `uv run pytest`: 138 tests, all passing. Tests never touch the network; the fake LLM is a real
+  `BaseChatModel`, so callbacks, fallbacks, and tool binding run through LangChain's own code.
 - `uv run ruff check` and `ruff format --check`: clean.
 - Read-only guarantee: a CLI test runs index, ask, debug, and chat and asserts no file in the indexed repo
   (including `.git/`) changed mtime and `git status` is unchanged.
 - Bug injection on the sample repo produces real traces for 7 bugs (Python ×5, Go, Java); the source repo
   stays clean.
 - `uv build` produces a wheel that includes the prompt templates; `haive --help` lists every command.
+
+## Since the first build
+
+- LangChain/LangGraph adoption (DECISIONS #2, #11, #23, #24): LangChain vector stores, `init_chat_model` +
+  rate limiter + `.with_fallbacks()`, LCEL structured output, `ChatPromptTemplate`s with chat history,
+  a metering callback, and a tool-calling expand subgraph (`ToolNode`).
+- Models (DECISIONS #22): new fast default, paid strong option (`--paid`, `use_paid_strong`).
+- Commits (DECISIONS #9): `max_commits = 300`, no diffs in commit chunks; `small_diff_lines` removed.
 
 ## Measurements (this cloud container: 4 CPU cores, no GPU)
 
@@ -53,8 +62,8 @@
 
 ## Known issues / risks
 
-- The default free model IDs in the spec (`google/gemma-4-26b-a4b-it:free`,
-  `nvidia/nemotron-3-ultra-550b-a55b:free`) haven't been checked against OpenRouter from here (no key).
+- The default free models are listed on OpenRouter (checked Oct 2026) but haven't been called from here
+  (no key), so their structured-output reliability is untested until the first real run.
 - CPU embedding with the default model is slow on large repos (see measurements). A GPU or a smaller
   model would help; changing the model means a new index (dimension must match).
 - `tree-sitter` is pinned below 0.26 because 0.26.0 segfaulted (see DECISIONS #3).

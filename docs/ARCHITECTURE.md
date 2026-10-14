@@ -11,7 +11,7 @@ flowchart LR
   subgraph index[haive index]
     D[discover<br/>git ls-files + denylist] --> C[chunk<br/>tree-sitter / structural]
     C --> E[embed<br/>fastembed, local]
-    GIT --> CM[commits<br/>last 1,000]
+    GIT --> CM[commits<br/>last 300, messages only]
     WT --> P[repo profile<br/>deterministic]
   end
   WT --> D
@@ -57,7 +57,7 @@ flowchart TD
   CMAP --> GR
   GR{grade<br/>fast LLM}
   GR -->|sufficient| A
-  GR -->|missing_symbol / need_context| X[expand<br/>code] --> GR
+  GR -->|missing_symbol / need_context| X[expand<br/>tool-calling subgraph] --> GR
   GR -->|need_external| WG
   GR -->|nothing_relevant, first time| RW[rewrite_query<br/>fast LLM] --> RT
   GR -->|nothing_relevant again| TG[to_general] --> W
@@ -78,10 +78,34 @@ flowchart TD
 - **Chat** reuses the thread's `messages`, so the router sees recent turns and follow-ups like "and in
   the other repo?" resolve. Per-turn accumulators (evidence, notices, call counts) reset on each turn via
   reducers that treat `None` as "reset".
+- **Expand** is a nested LangGraph: `plan` (the fast model with five `@tool`s bound: `find_definition`,
+  `find_usages`, `read_file`, `search_code`, `recent_commits`) → `tools_condition` → prebuilt `ToolNode`,
+  which runs the chosen calls in parallel. Each tool returns `(content, artifact)`; the artifacts are
+  evidence dicts. When the model can't call tools, fails, or the budget can't cover a planning call,
+  deterministic heuristics produce the plan and the same `ToolNode` runs it.
 - **Verification** (`graph/verify.py`) is pure code: a repo claim's file must exist in the live tree, the
   lines must be in range, the symbol must appear within ±3 lines, and the path must be among this run's
   evidence; web URLs must be among this run's results; model claims carry no refs. Debug diffs are
   checked line by line against the cited file.
+
+## Where LangChain and LangGraph are used
+
+| Concern | Library piece | Where |
+|---|---|---|
+| Orchestration | `StateGraph`, conditional edges, reducers, `add_messages` | `graph/build.py`, `graph/state.py` |
+| Parallel fan-out | `Send` | `graph/fanout.py` (compare targets, per-repo summaries) |
+| Human in the loop | `interrupt` / `Command(resume=…)` | `graph/router.py` (clarify), `graph/web_node.py` (web approval) |
+| Persistence | `SqliteSaver` (chat), `InMemorySaver` (tests) | `runtime.py`, `graph/build.py` |
+| Tool use | `@tool(response_format="content_and_artifact")`, `ToolNode`, `tools_condition`, `bind_tools` | `graph/agent_tools.py`, `graph/expand.py` |
+| Models | `init_chat_model`, `InMemoryRateLimiter`, `.with_fallbacks()` | `llm/models.py` |
+| Structured output | `with_structured_output(method="function_calling")`, `PydanticOutputParser`, LCEL, `with_fallbacks(exception_key=…)` | `llm/structured.py` |
+| Prompts | `ChatPromptTemplate`, `MessagesPlaceholder` | `prompts/__init__.py` |
+| Observability / budgets | `BaseCallbackHandler` (`on_chat_model_start`, `on_llm_end`, `on_tool_*`) | `llm/budget.py` |
+| Retrieval | `Embeddings`, `Document`, `InMemoryVectorStore`, `PineconeVectorStore`, `Chroma` | `index/embed.py`, `store/` |
+
+Deliberately hand-written: chunking (tree-sitter), discovery and the secrets denylist, git/ripgrep
+tools, trace parsing and path mapping, the repo profile and connection map, and claim verification.
+These are domain logic with no LangChain equivalent.
 
 ## Modules
 
@@ -90,10 +114,10 @@ flowchart TD
 | `types.py` | Shared contracts: Chunk, Hit, Evidence, WebResult, Frame/ParsedTrace, Answer/Claim/refs, RepoProfile, protocols |
 | `config.py`, `paths.py`, `db.py` | TOML config and scope resolution, platform paths, SQLite schema + migrations |
 | `index/` | discover, chunk_code (tree-sitter), chunk_text, commits, profile, embed, pipeline, freshness |
-| `store/` | `base.py` interface + filter normalization + in-memory store; Pinecone and Chroma adapters |
+| `store/` | thin adapter over LangChain vector stores (`InMemoryVectorStore`, `PineconeVectorStore`, `Chroma`) |
 | `tools/` | read-only git, ripgrep (+ fallback), file windows, trace parsers, path mapping, web search |
-| `llm/` | role models with fallback/backoff/throttle, structured output + JSON repair, budgets |
-| `prompts/` | versioned prompt templates (`*.md`) |
-| `graph/` | state, router, retrieve, debug, fanout, grade, expand, web_node, answer, verify, finalize, build |
+| `llm/` | `init_chat_model` + `InMemoryRateLimiter`, `.with_fallbacks()` chains, LCEL structured output, the metering callback |
+| `prompts/` | versioned `*.md` files loaded as `ChatPromptTemplate`s (system / history / human sections) |
+| `graph/` | state, router, retrieve, debug, fanout, grade, expand (+ `agent_tools`), web_node, answer, verify, finalize, build |
 | `render.py`, `threads.py`, `runtime.py`, `cli.py` | output, chat thread metadata, wiring, commands |
 | `eval/` | suite runner, metrics, bug injection, sample setup |

@@ -15,7 +15,7 @@ says exactly what goes where.
 
 | Destination | What | When |
 |---|---|---|
-| **LLM provider** (OpenRouter by default) | Your question, recent chat turns, and the code/config/doc snippets, commit messages, and trace text retrieved for it | Every question (router, grader, answer, titles) |
+| **LLM provider** (OpenRouter by default) | Your question, recent chat turns, and the code/config/doc snippets, commit messages, and trace text retrieved for it | Every question (router, grader, expand planner, answer, titles). With `--paid`, the answer goes to the paid model's provider |
 | **Pinecone** (default store) | Vectors plus chunk text and metadata (repo, path, symbol, lines) for everything indexed | `haive index` and freshness re-indexing |
 | **Web search** (DuckDuckGo or Tavily) | A search query, which may include an error message fragment or a library name | Only when web mode allows (`ask` asks first; `off` never) |
 | **GitHub / your git host** | Normal git traffic | `haive add <url>` (clone) and `haive sync` (pull) |
@@ -38,7 +38,7 @@ Use `haive init --backend chroma`, a local OpenAI-compatible model server for `m
 - **Denylist (never indexed, never read into a prompt, never returned by search):** `.env*` (except
   `.env.example`, `.env.sample`, `.env.template`), `*.pem`, `*.key`, `id_rsa*`/`id_dsa*`/`id_ecdsa*`/
   `id_ed25519*`, `*.p12`, `*.pfx`, `credentials*`, `secrets*`, keystores, `.npmrc`, `.pypirc`, `.netrc`.
-- **Content scan:** chunks (and small commit diffs) that contain obvious tokens are dropped: AWS keys,
+- **Content scan:** chunks and commit messages that contain obvious tokens are dropped: AWS keys,
   `sk-…` style API keys, private key headers, GitHub/Slack/Google/Pinecone/Tavily tokens.
 - `.gitignore` is always respected, so ignored files are never indexed.
 - haive's own keys live in your environment or `~/.config/haive/.env` (mode 600), never in `config.toml`.

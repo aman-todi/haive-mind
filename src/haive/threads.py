@@ -59,7 +59,7 @@ def make_title(llm: LLM, question: str, meter: Meter) -> str:
     """At most 8 words from the fast model; falls back to the first 60 characters of the question."""
     fallback = " ".join(question.split())[:60]
     try:
-        text = llm.text("fast", prompts.render("title", question=question[:1000]), meter)
+        text = llm.text("fast", prompts.messages("title", question=question[:1000]), meter)
     except (LLMError, BudgetExceeded):
         return fallback
     title = (

@@ -45,7 +45,7 @@ def make_grade(deps: Deps):
                 "notices": ["LLM call budget nearly spent; answered without further checks."],
             }
         ctx.meter.limit = max(0, deps.remaining(state) - ANSWER_RESERVE)
-        prompt = prompts.render(
+        prompt = prompts.messages(
             "grade",
             intent=state.get("intent"),
             question=state.get("rewritten_query") or state["question"],
@@ -84,7 +84,7 @@ def route_after_grade(deps: Deps):
 def make_rewrite(deps: Deps):
     def rewrite(state: GraphState, ctx: NodeCtx) -> dict[str, Any]:
         ctx.meter.limit = max(0, deps.remaining(state) - ANSWER_RESERVE)
-        prompt = prompts.render(
+        prompt = prompts.messages(
             "rewrite",
             repos=", ".join(state.get("scope_repos") or []),
             question=state["question"],

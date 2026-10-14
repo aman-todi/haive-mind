@@ -151,7 +151,7 @@ def make_summarize_repo(deps: Deps):
             else []
         )
         excerpts = "\n\n".join(f"{h.path}:\n{h.text[:1200]}" for h in hits) or "(none)"
-        prompt = prompts.render("summarize_repo", profile=profile_summary(prof), excerpts=excerpts)
+        prompt = prompts.messages("summarize_repo", profile=profile_summary(prof), excerpts=excerpts)
         try:
             s = structured(deps.llm, "fast", RepoSummary, prompt, ctx.meter)
             s.repo = repo

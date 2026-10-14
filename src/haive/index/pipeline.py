@@ -149,7 +149,7 @@ class Indexer:
 
     def _commits(self, name: str, root: Path, stats: IndexStats, rebuild: bool = False) -> str | None:
         ic = self.cfg.index
-        cs = commit_index.index_commits(self.db, self.store, name, root, ic.max_commits, ic.small_diff_lines)
+        cs = commit_index.index_commits(self.db, self.store, name, root, ic.max_commits)
         stats.commits_added += cs.added
         stats.commits_removed += cs.removed
         stats.commits_rebuilt = stats.commits_rebuilt or cs.rebuilt

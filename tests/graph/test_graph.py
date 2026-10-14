@@ -5,7 +5,7 @@ import pytest
 from haive.config import RepoConfig
 from haive.graph.router import code_identifiers, heuristic_intent
 from haive.types import WebResult
-from tests.fakes import FakeHTTPError
+from tests.fakes import api_error
 from tests.graph.helpers import DCF_CLAIM, answer, grade, make_runner, nodes, repo_claim, router
 
 TRACES = Path(__file__).parent.parent / "fixtures" / "traces"
@@ -103,7 +103,9 @@ def test_grade_loop_limit(cfg, db, store):
     res = r.run(Q, thread_id="t")
     assert nodes(res).count("expand") == 2 and "exhausted" in nodes(res)
     assert res.state["low_confidence"]
-    assert any(e["path"] == "app/server.py" and "expand" in e["why"] for e in res.state["evidence"])
+    assert any(
+        e["path"] == "app/server.py" and e["why"] == "read app/server.py" for e in res.state["evidence"]
+    )
 
 
 def test_nothing_relevant_rewrites_then_general(cfg, db, store):
@@ -291,7 +293,7 @@ def test_router_failure_uses_heuristics(cfg, db, store):
         db,
         store,
         {
-            "RouterOutput": [FakeHTTPError(500)],
+            "RouterOutput": [api_error(500)],
             "GradeOutput": [grade()],
             "Answer": [answer(DCF_CLAIM)],
         },
@@ -553,3 +555,50 @@ def test_heuristics_and_identifiers():
         "API_URL",
         "loadUser",
     ]
+
+
+def test_expand_with_model_planned_tool_calls(cfg, db, store):
+    r, fake = make_runner(cfg, db, store, {
+        "RouterOutput": [router(identifiers=["create_valuation"])],
+        "GradeOutput": [grade("missing_symbol", ["choose_method"]), grade()],
+        "tools": [[{"name": "find_definition", "args": {"symbol": "choose_method"}},
+                   {"name": "recent_commits", "args": {"path": "app/api/client.py"}}]],
+        "Answer": [answer(DCF_CLAIM)],
+    }, supports_tools=True)  # fmt: skip
+    res = r.run("How does create_valuation work?", thread_id="t")
+    assert "tools" in fake.calls  # one planning call by the fast model
+    expand = next(e for e in res.state["node_log"] if e.get("node") == "expand")
+    assert expand["detail"].startswith("model plan: ['find_definition', 'recent_commits']")
+    whys = [e["why"] for e in res.state["evidence"]]
+    assert "definition of choose_method" in whys
+    assert any(w == "recent commit touching app/api/client.py" for w in whys)
+    tool_events = [e for e in res.state["node_log"] if e["type"] == "tool" and e["name"] == "find_definition"]
+    assert tool_events  # ToolNode runs show up in --trace
+    assert not any(c.unverified for c in res.answer.all_claims())
+
+
+def test_expand_uses_heuristics_when_budget_is_tight(cfg, db, store):
+    cfg.limits.max_llm_calls_per_question = 4  # router + grade leave 2: not enough for plan + grade + answer
+    r, fake = make_runner(cfg, db, store, {
+        "RouterOutput": [router(identifiers=["create_valuation"])],
+        "GradeOutput": [grade("missing_symbol", ["choose_method"]), grade()],
+        "tools": [AssertionError("the planner must not be called")], "Answer": [answer(DCF_CLAIM)],
+    }, supports_tools=True)  # fmt: skip
+    res = r.run("How does create_valuation work?", thread_id="t")
+    assert "tools" not in fake.calls
+    expand = next(e for e in res.state["node_log"] if e.get("node") == "expand")
+    assert expand["detail"].startswith("heuristic plan")
+
+
+def test_chat_history_reaches_router_as_messages(cfg, db, store):
+    r, fake = make_runner(cfg, db, store, {
+        "RouterOutput": [router(identifiers=["choose_method"])], "GradeOutput": [grade()],
+        "Answer": [answer(DCF_CLAIM)],
+    })  # fmt: skip
+    r.run(Q, thread_id="chat")
+    r.run("and where is discount?", thread_id="chat")
+    router_calls = [msgs for msgs, name in zip(fake.seen, fake.calls, strict=True) if name == "RouterOutput"]
+    second = router_calls[1]
+    kinds = [m.type for m in second]
+    assert kinds[:4] == ["system", "human", "ai", "human"]  # system, history (Q + answer), new question
+    assert second[1].content == Q and "choose_method" in second[2].content

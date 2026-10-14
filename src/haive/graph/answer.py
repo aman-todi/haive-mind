@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from haive import prompts
-from haive.graph.state import Deps, GraphState, NodeCtx, history_text, render_evidence
+from haive.graph.state import Deps, GraphState, NodeCtx, history_messages, render_evidence
 from haive.graph.verify import claim_keys, verify
 from haive.llm.budget import BudgetExceeded
 from haive.llm.models import LLMError
@@ -60,11 +60,11 @@ def make_answer(deps: Deps):
         if intent == "debug" and state.get("parsed_trace"):
             from haive.graph.debug import trace_summary
 
-            template = prompts.render(
+            template = prompts.text(
                 "diagnose", trace=trace_summary(ParsedTrace.model_validate(state["parsed_trace"]))
             )
         else:
-            template = prompts.render(f"answer_{intent}" if intent != "debug" else "answer_lookup")
+            template = prompts.text(f"answer_{intent}" if intent != "debug" else "answer_lookup")
         errors = ""
         if state.get("verify_errors"):
             errors = (
@@ -72,13 +72,12 @@ def make_answer(deps: Deps):
                 "in the evidence headers, keep symbols inside the cited lines, and change unsupported claims to "
                 "source 'model' with no refs.\n- " + "\n- ".join(state["verify_errors"][:15])
             )
-        hist = history_text(state)
-        prompt = prompts.render(
+        prompt = prompts.messages(
             "answer_common",
             template=template,
             intent=intent,
             question=state["question"],
-            history=f"Conversation so far:\n{hist}" if hist != "(none)" else "",
+            history=history_messages(state),
             errors=errors,
             evidence=render_evidence(state.get("evidence") or []),
             web=render_web(state.get("web_results") or []),

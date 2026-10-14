@@ -33,7 +33,7 @@ def test_normalize_filter():
 @pytest.mark.parametrize("kind", ["memory", "chroma"])
 def test_store_contract(kind, embedder):
     store = (
-        MemoryStore(embedder) if kind == "memory" else ChromaStore(embedder, collection=f"t{id(embedder)}")
+        MemoryStore(embedder) if kind == "memory" else ChromaStore(embedder, collection=f"test{id(embedder)}")
     )
     cs = chunks()
     store.upsert(cs)
@@ -59,8 +59,9 @@ def test_pinecone_store_with_mock_client(embedder):
     assert store.ensure_index() is True
     pc.create_index.assert_called_once()
     store.upsert(chunks())
-    sent = index.upsert.call_args.kwargs["vectors"]
-    assert len(sent) == 3 and len(sent[0]["values"]) == 768 and sent[0]["metadata"]["repo"] == "a"
+    sent = index.upsert.call_args.kwargs["vectors"]  # (id, values, metadata) via langchain-pinecone
+    assert len(sent) == 3 and len(sent[0][1]) == 768 and sent[0][2]["repo"] == "a"
+    assert sent[0][2]["text"].startswith("a/x.py :: fetch_user\n") and sent[0][2]["header_lines"] == 1
     index.query.return_value = {
         "matches": [
             {
@@ -72,14 +73,15 @@ def test_pinecone_store_with_mock_client(embedder):
                     "kind": "code",
                     "start_line": 1,
                     "end_line": 1,
-                    "text": "t",
+                    "header_lines": 1,
+                    "text": "a/x.py :: f\nt",
                 },
             }
         ]
     }
     hits = store.search("q", 5, {"repo": ["a"], "kind": ["code"]})
     assert index.query.call_args.kwargs["filter"] == {"repo": {"$in": ["a"]}, "kind": {"$in": ["code"]}}
-    assert hits[0].path == "x.py" and hits[0].score == 0.9
+    assert hits[0].path == "x.py" and hits[0].score == 0.9 and hits[0].text == "t"
     index.list.return_value = iter([["a:1", "a:2"], ["a:3"]])
     assert store.count({"repo": ["a"]}) == 3
 

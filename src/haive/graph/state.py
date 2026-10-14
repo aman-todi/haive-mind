@@ -280,11 +280,6 @@ def render_evidence(evidence: list[dict[str, Any]], max_chars: int = 60_000, abb
     return "\n".join(out) if out else "(none)"
 
 
-def history_text(state: GraphState, turns: int = 6) -> str:
-    msgs = list(state.get("messages") or [])[:-1][-turns:]
-    lines = []
-    for m in msgs:
-        role = "user" if m.type == "human" else "assistant"
-        content = m.content if isinstance(m.content, str) else str(m.content)
-        lines.append(f"{role}: {content[:600]}")
-    return "\n".join(lines) if lines else "(none)"
+def history_messages(state: GraphState, turns: int = 6) -> list[AnyMessage]:
+    """Recent chat turns before the current question (for MessagesPlaceholder("history"))."""
+    return list(state.get("messages") or [])[:-1][-turns:]

@@ -14,7 +14,7 @@ from haive.cli import app
 from haive.config import load_config, save_config
 from haive.llm.models import LLM
 from haive.runtime import Runtime
-from tests.fakes import FakeChatModel, factory_for
+from tests.fakes import FakeChatModel
 from tests.graph.helpers import DCF_CLAIM, answer, grade, repo_claim, router
 
 pytest.importorskip("chromadb")
@@ -40,9 +40,13 @@ def cli(monkeypatch, haive_home):
             "text": ["Where the DCF picks its method"],
         }
     )
-    monkeypatch.setattr(
-        Runtime, "llm", property(lambda self: LLM(self.cfg, self.db, factory_for(fake), sleep=lambda s: None))
-    )
+    built: list[str] = []
+
+    def factory(model_id):
+        built.append(model_id)
+        return fake
+
+    monkeypatch.setattr(Runtime, "llm", property(lambda self: LLM(self.cfg, self.db, factory)))
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("COLUMNS", "200")
     runner = CliRunner()
@@ -54,6 +58,7 @@ def cli(monkeypatch, haive_home):
         return res
 
     run.fake = fake  # type: ignore[attr-defined]
+    run.built = built  # type: ignore[attr-defined]
     return run
 
 
@@ -225,3 +230,12 @@ def test_add_validation(cli, sample_repo, tmp_path):
     assert cli("add", str(tmp_path), ok=False).exit_code == 1
     assert cli("add", str(sample_repo), "--name", "valuation", ok=False).exit_code == 1
     assert cli("add", str(sample_repo), "--name", "bad:name", ok=False).exit_code == 1
+
+
+def test_paid_flag_uses_strong_paid_model(cli, sample_repo):
+    setup_repo(cli, sample_repo)
+    cli("ask", "Where does the DCF choose a valuation method?", "--json")
+    assert "deepseek/deepseek-v4-pro-0813" not in cli.built
+    cli("ask", "Where does the DCF choose a valuation method?", "--json", "--paid")
+    assert "deepseek/deepseek-v4-pro-0813" in cli.built
+    assert "strong_paid: deepseek/deepseek-v4-pro-0813  (off" in cli("status").output

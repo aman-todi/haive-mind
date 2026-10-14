@@ -1,14 +1,24 @@
-"""Vector store interface, filter normalization, factory, and an in-memory reference store.
+"""Vector stores: a thin adapter over LangChain ``VectorStore``s.
 
-Filters use ``{"repo": {"$in": [...]}, "kind": {"$in": [...]}}``; several keys are ANDed.
-Pinecone accepts that implicitly; Chroma needs an explicit ``$and``. ``normalize_filter`` turns
-plain values and lists into ``$eq`` / ``$in`` and drops empty clauses.
+haive's code talks to ``upsert / delete / search / count`` (the ``VectorStore`` protocol in
+``types.py``); each backend wraps a LangChain store: ``langchain_pinecone.PineconeVectorStore``,
+``langchain_chroma.Chroma``, or ``langchain_core.vectorstores.InMemoryVectorStore`` (tests).
+
+Chunks become ``Document``s whose ``page_content`` is the *embedding* text (a ``repo/path :: symbol``
+location header, then the raw chunk), so the vector carries location context. The header line
+count is stored in metadata and stripped on the way out, so hits return the raw chunk text.
+
+Filters use ``{"repo": {"$in": [...]}, "kind": {"$in": [...]}}``; several keys are ANDed. Pinecone
+accepts that implicitly; Chroma needs an explicit ``$and``; the in-memory store takes a callable.
 """
 
 from __future__ import annotations
 
-import math
 from typing import Any
+
+from langchain_core.documents import Document
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.vectorstores import VectorStore as LCVectorStore
 
 from haive.types import Chunk, Embedder, Hit, VectorStore
 
@@ -46,17 +56,22 @@ def matches(meta: dict[str, Any], f: dict[str, Any]) -> bool:
     return True
 
 
-def clean_metadata(chunk: Chunk) -> dict[str, Any]:
-    meta = chunk.metadata()
-    text = meta["text"].encode("utf-8")
-    if len(text) > MAX_METADATA_TEXT:
-        meta["text"] = text[:MAX_METADATA_TEXT].decode("utf-8", "ignore")
-    return {k: v for k, v in meta.items() if v is not None}
+def to_document(chunk: Chunk) -> Document:
+    content = chunk.embed_text
+    encoded = content.encode("utf-8")
+    if len(encoded) > MAX_METADATA_TEXT:
+        content = encoded[:MAX_METADATA_TEXT].decode("utf-8", "ignore")
+    meta = {k: v for k, v in chunk.metadata().items() if k != "text" and v is not None}
+    meta["header_lines"] = chunk.embed_text[: len(chunk.embed_text) - len(chunk.text)].count("\n")
+    return Document(id=chunk.id, page_content=content, metadata=meta)
 
 
-def hit_from(id_: str, score: float, meta: dict[str, Any]) -> Hit:
+def to_hit(doc: Document, score: float, id_: str | None = None) -> Hit:
+    meta = doc.metadata or {}
+    skip = int(meta.get("header_lines", 0) or 0)
+    text = "\n".join(doc.page_content.split("\n")[skip:])
     return Hit(
-        id=id_,
+        id=id_ or doc.id or "",
         score=float(score),
         repo=meta.get("repo", ""),
         path=meta.get("path", ""),
@@ -65,44 +80,58 @@ def hit_from(id_: str, score: float, meta: dict[str, Any]) -> Hit:
         symbol=meta.get("symbol", ""),
         start_line=int(meta.get("start_line", 0) or 0),
         end_line=int(meta.get("end_line", 0) or 0),
-        text=meta.get("text", ""),
+        text=text,
     )
 
 
-class MemoryStore:
-    """In-process cosine store. Used by tests and as the reference implementation."""
+class LangChainStore:
+    """Adapter from a LangChain VectorStore to haive's ``VectorStore`` protocol."""
 
-    def __init__(self, embedder: Embedder):
-        self.embedder = embedder
-        self.vectors: dict[str, tuple[list[float], dict[str, Any]]] = {}
+    vs: LCVectorStore
+
+    def __init__(self, vs: LCVectorStore):
+        self.vs = vs
 
     def upsert(self, chunks: list[Chunk]) -> None:
-        from haive.index.embed import embed_chunks
-
-        for c, v in zip(chunks, embed_chunks(self.embedder, chunks), strict=True):
-            self.vectors[c.id] = (v, clean_metadata(c))
+        for i in range(0, len(chunks), UPSERT_BATCH):
+            batch = chunks[i : i + UPSERT_BATCH]
+            self.vs.add_documents([to_document(c) for c in batch], ids=[c.id for c in batch])
 
     def delete(self, ids: list[str]) -> None:
-        for i in ids:
-            self.vectors.pop(i, None)
+        if ids:
+            self.vs.delete(ids=ids)
+
+    def _filter(self, f: dict[str, Any]) -> Any:
+        return f or None
+
+    def _scored(self, query: str, k: int, filter: Any) -> list[tuple[Document, float]]:
+        """(document, similarity in [0, 1]) pairs; higher is better."""
+        return self.vs.similarity_search_with_relevance_scores(query, k=k, filter=filter)
 
     def search(self, query: str, k: int, filter: dict[str, Any] | None = None) -> list[Hit]:
         f = normalize_filter(filter)
-        q = self.embedder.embed_query(query)
-        scored = []
-        for id_, (v, meta) in self.vectors.items():
-            if f and not matches(meta, f):
-                continue
-            dot = sum(a * b for a, b in zip(q, v, strict=False))
-            nq = math.sqrt(sum(a * a for a in q)) or 1.0
-            nv = math.sqrt(sum(b * b for b in v)) or 1.0
-            scored.append((dot / (nq * nv), id_, meta))
-        scored.sort(key=lambda t: -t[0])
-        return [hit_from(i, s, m) for s, i, m in scored[:k]]
+        return [to_hit(doc, score) for doc, score in self._scored(query, k, self._filter(f))]
+
+    def count(self, filter: dict[str, Any] | None = None) -> int:
+        raise NotImplementedError
+
+
+class MemoryStore(LangChainStore):
+    """``InMemoryVectorStore`` (cosine). Used by tests and as the reference implementation."""
+
+    def __init__(self, embedder: Embedder):
+        super().__init__(InMemoryVectorStore(embedding=embedder))
+        self.embedder = embedder
+
+    def _filter(self, f: dict[str, Any]) -> Any:
+        return (lambda doc: matches(doc.metadata, f)) if f else None
+
+    def _scored(self, query: str, k: int, filter: Any) -> list[tuple[Document, float]]:
+        return self.vs.similarity_search_with_score(query, k=k, filter=filter)  # already cosine similarity
 
     def count(self, filter: dict[str, Any] | None = None) -> int:
         f = normalize_filter(filter)
-        return sum(1 for _, meta in self.vectors.values() if not f or matches(meta, f))
+        return sum(1 for d in self.vs.store.values() if not f or matches(d["metadata"], f))
 
 
 def make_store(cfg: Any, embedder: Embedder, *, backend: str | None = None) -> VectorStore:

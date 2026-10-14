@@ -23,7 +23,6 @@ READ_ONLY = {
     "rev-parse",
     "diff-tree",
     "status",
-    "show",
     "merge-base",
     "cat-file",
     "remote",
@@ -249,14 +248,6 @@ def _parse_log(out: str, with_patch: bool = False) -> list[dict]:
             }
         )
     return commits
-
-
-def show_patch(root: Path | str, sha: str, max_chars: int = 4000) -> str:
-    try:
-        out = _git(root, "show", "--format=", "--no-color", "--patch", sha)
-    except GitError:
-        return ""
-    return out[:max_chars]
 
 
 # ---------------------------------------------------------------- state-changing (guarded)

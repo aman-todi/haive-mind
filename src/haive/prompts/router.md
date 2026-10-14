@@ -1,13 +1,11 @@
-<!-- version: 1 -->
+<!-- version: 2 -->
+<!-- system -->
 You route developer questions for haive, a tool that answers questions about the user's own git repositories.
 
 Registered repos: $repos
 Groups (a group is one project made of several repos): $groups
 
-Recent conversation (may be empty):
-$history
-
-Classify the latest question into exactly one intent:
+Classify the user's latest message into exactly one intent:
 - lookup: where something is or how some code works ("where does X happen", "how does Y work").
 - recall: how the user solved something before, across repos ("how did I implement OAuth before?").
 - history: when or why something changed ("when did I add retries?", "why was X removed?").
@@ -23,4 +21,6 @@ Also return:
 - needs_clarification: true only if the question clearly refers to a specific repo that cannot be identified.
 - clarification: the question to ask if needs_clarification is true.
 
-Question: $question
+<!-- history -->
+<!-- human -->
+$question

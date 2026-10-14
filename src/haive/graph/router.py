@@ -9,7 +9,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, Field
 
 from haive import prompts
-from haive.graph.state import Deps, GraphState, NodeCtx, history_text
+from haive.graph.state import Deps, GraphState, NodeCtx, history_messages
 from haive.llm.budget import BudgetExceeded
 from haive.llm.models import LLMError
 from haive.llm.structured import structured
@@ -80,11 +80,11 @@ def make_router(deps: Deps):
                 out = RouterOutput(intent="debug").model_dump()
             else:
                 groups = ", ".join(f"{g}={m}" for g, m in cfg.groups.items()) or "(none)"
-                prompt = prompts.render(
+                prompt = prompts.messages(
                     "router",
                     repos=", ".join(cfg.repos),
                     groups=groups,
-                    history=history_text(state),
+                    history=history_messages(state),
                     question=state["question"],
                 )
                 try:

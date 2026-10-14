@@ -53,9 +53,10 @@ def make_runner(
     index: bool = True,
     persist: bool = False,
     ablation: str = "hybrid+loop",
+    supports_tools: bool = False,
 ) -> tuple[Runner, FakeChatModel]:
-    fake = FakeChatModel(script)
-    llm = LLM(cfg, db, factory_for(fake), sleep=lambda s: None)
+    fake = FakeChatModel(script, supports_tools=supports_tools)
+    llm = LLM(cfg, db, factory_for(fake))
     if index:
         idx = Indexer(cfg, db, store)
         for name in cfg.repos:

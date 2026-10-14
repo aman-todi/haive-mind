@@ -10,13 +10,17 @@ import math
 import re
 from collections.abc import Iterator
 
-from haive.types import Chunk, Embedder
+from langchain_core.embeddings import Embeddings
+
+from haive.types import Embedder
 
 # Chunks are capped at ~1,500 tokens; cap embedding input too, so attention memory stays bounded.
 MAX_EMBED_CHARS = 6000
 
 
-class FastEmbedder:
+class FastEmbedder(Embeddings):
+    """LangChain ``Embeddings`` over fastembed (ONNX, runs locally)."""
+
     def __init__(
         self, model: str = "jinaai/jina-embeddings-v2-base-code", dim: int = 768, batch_size: int = 8
     ):
@@ -54,7 +58,7 @@ def _tokens(text: str) -> Iterator[str]:
                 yield part.lower()
 
 
-class HashEmbedder:
+class HashEmbedder(Embeddings):
     """Bag-of-tokens feature hashing. Deterministic; good enough for tests and ablations."""
 
     def __init__(self, dim: int = 768):
@@ -73,13 +77,6 @@ class HashEmbedder:
 
     def embed_query(self, text: str) -> list[float]:
         return self._vec(text)
-
-
-def embed_chunks(embedder: Embedder, chunks: list[Chunk], batch: int = 64) -> list[list[float]]:
-    out: list[list[float]] = []
-    for i in range(0, len(chunks), batch):
-        out += embedder.embed_documents([c.embed_text for c in chunks[i : i + batch]])
-    return out
 
 
 def make_embedder(model: str, dim: int, batch_size: int = 8) -> Embedder:

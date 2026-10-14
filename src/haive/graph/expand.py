@@ -1,81 +1,89 @@
-"""Expand (code only): fetch what the grader said was missing — definitions, callers, files, config."""
+"""Expand: fetch what the grader said was missing (definitions, callers, files, config, commits).
+
+A small LangGraph subgraph: ``plan`` -> ``tools_condition`` -> prebuilt ``ToolNode``. The plan
+comes from the fast model with the tools bound (it picks the calls, in parallel), or, when the
+model can't call tools or the budget is tight, from deterministic heuristics. Either way the same
+``ToolNode`` executes the calls and their artifacts become evidence.
+"""
 
 from __future__ import annotations
 
-import re
-from typing import Any
+from typing import Annotated, Any, TypedDict
 
-from haive.graph.retrieve import ripgrep_evidence
-from haive.graph.state import Deps, GraphState, NodeCtx, ev_from_snippet
-from haive.tools import files, ripgrep
+from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
 
-PATH_LINE = re.compile(r"^([\w./@~+-]+\.[A-Za-z0-9]+)(?::(\d+))?$")
+from haive import prompts
+from haive.graph.agent_tools import heuristic_calls, make_tools
+from haive.graph.grade import ANSWER_RESERVE
+from haive.graph.state import Deps, GraphState, NodeCtx
+from haive.llm.models import RECOVERABLE
+
+MAX_TOOL_CALLS = 4
 
 
-def _find_path(deps: Deps, path: str, scope: list[str]) -> tuple[str, str] | None:
-    path = path.strip("`'\" ").lstrip("./")
-    candidates = deps.db.indexed_paths(scope)
-    exact = [c for c in candidates if c[1] == path]
-    if exact:
-        return exact[0]
-    suffix = [c for c in candidates if c[1].endswith("/" + path) or c[1].endswith(path)]
-    return min(suffix, key=lambda c: len(c[1])) if suffix else None
+class ExpandState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+
+def build_expand_graph(plan, tools):
+    g = StateGraph(ExpandState)
+    g.add_node("plan", plan)
+    g.add_node("tools", ToolNode(tools))
+    g.add_edge(START, "plan")
+    g.add_conditional_edges("plan", tools_condition, {"tools": "tools", END: END})
+    g.add_edge("tools", END)
+    return g.compile()
 
 
 def make_expand(deps: Deps):
     def expand(state: GraphState, ctx: NodeCtx) -> dict[str, Any]:
         scope = state.get("scope_repos") or list(deps.cfg.repos)
-        roots = deps.roots(scope)
-        have = {(e.get("repo"), e.get("path")) for e in state.get("evidence") or []}
         missing = (state.get("grade") or {}).get("missing", [])[:4]
-        evs: list[dict[str, Any]] = []
-        for item in missing:
-            item = item.strip()
-            m = PATH_LINE.match(item)
-            if (
-                m
-                and ("/" in item or "." in item.split(":")[0])
-                and not re.fullmatch(r"[A-Za-z_]\w*\.[A-Za-z_]\w*", item)
-            ):
-                hit = _find_path(deps, m.group(1), scope)
-                if hit:
-                    repo, path = hit
-                    line = int(m.group(2)) if m.group(2) else None
-                    try:
-                        snip = (
-                            files.window(roots[repo], path, line, 25)
-                            if line
-                            else files.read_range(roots[repo], path, 1, 120)
-                        )
-                    except files.FileAccessError:
-                        snip = None
-                    if snip:
-                        evs.append(ev_from_snippet(repo, snip, "tool", f"expand: {item}"))
-                    continue
-            name = re.split(r"[.:]+", item)[-1].strip("()` ")
-            if re.fullmatch(r"[A-Za-z_]\w*", name):
-                defs = ctx.timed("find_definition", name, lambda n=name: ripgrep.find_definition(n, roots, 5))
-                for d in defs[:2]:
-                    snip = files.window(roots[d.repo], d.path, d.line, 15)
-                    if snip:
-                        evs.append(ev_from_snippet(d.repo, snip, "tool", f"definition of {name}"))
-                # callers / uses not already in evidence
-                uses = ctx.timed(
-                    "callers",
-                    name,
-                    lambda n=name: ripgrep.search(n, roots, fixed=True, word=True, max_per_repo=20),
+        have = sorted({f"{e['repo']}/{e['path']}" for e in state.get("evidence") or [] if e.get("path")})
+        tools = make_tools(deps.roots(scope), deps.db.indexed_paths(scope))
+        # plan + the grade after it + the answer must all fit in the budget
+        use_model = deps.cfg.limits.expand_with_tools and deps.remaining(state) >= ANSWER_RESERVE + 2
+        bound = None
+        if use_model:
+            try:
+                runnables = [deps.llm.model(mid).bind_tools(tools) for mid in deps.llm.model_ids("fast")]
+                bound = runnables[0].with_fallbacks(runnables[1:], exceptions_to_handle=RECOVERABLE)
+            except NotImplementedError:
+                bound = None
+        how = {"planner": "heuristic"}
+
+        def plan(s: ExpandState) -> dict[str, Any]:
+            msg: AIMessage | None = None
+            if bound is not None:
+                prompt = prompts.messages(
+                    "expand", max_calls=MAX_TOOL_CALLS, repos=", ".join(scope), have=", ".join(have[:30]) or "(none)",
+                    question=state.get("rewritten_query") or state["question"], missing="; ".join(missing),
+                )  # fmt: skip
+                try:
+                    msg = bound.invoke(prompt)
+                except Exception:  # BudgetExceeded or any model failure: use the heuristic plan
+                    msg = None
+                how["planner"] = (
+                    "model" if msg is not None and msg.tool_calls else "heuristic (model gave no calls)"
                 )
-                for u in [
-                    u
-                    for u in uses
-                    if (u.repo, u.path) not in have and not any(d.path == u.path for d in defs)
-                ][:2]:
-                    snip = files.window(roots[u.repo], u.path, u.line, 10)
-                    if snip:
-                        evs.append(ev_from_snippet(u.repo, snip, "tool", f"use of {name}"))
-                continue
-            evs += ripgrep_evidence(deps, [item], scope, ctx, word=False, max_files=3)
-        ctx.detail = f"{len(evs)} new evidence for {missing}"
+            if msg is None or not msg.tool_calls:
+                calls = heuristic_calls(missing)
+                msg = AIMessage(content="", tool_calls=[{**c, "id": f"h{i}"} for i, c in enumerate(calls)])
+            msg.tool_calls = msg.tool_calls[:MAX_TOOL_CALLS]
+            return {"messages": [msg]}
+
+        graph = build_expand_graph(plan, tools)
+        out = graph.invoke({"messages": []}, config=deps.llm.run_config("fast", ctx.meter))
+        evs: list[dict[str, Any]] = []
+        names = []
+        for m in out["messages"]:
+            if isinstance(m, ToolMessage):
+                names.append(m.name)
+                evs.extend(m.artifact or [])
+        ctx.detail = f"{how['planner']} plan: {names} -> {len(evs)} evidence"
         return {"evidence": evs, "loops": state.get("loops", 0) + 1}
 
     return expand

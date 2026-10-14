@@ -24,8 +24,9 @@ class RepoConfig(BaseModel):
 
 
 class IndexConfig(BaseModel):
-    max_commits: int = 1000
-    small_diff_lines: int = 200
+    max_commits: int = (
+        300  # commit chunks hold messages and file lists only; git log -S/-L cover code changes
+    )
     max_file_kb: int = 512
     extra_ignore: list[str] = Field(default_factory=lambda: ["*.ipynb"])
 
@@ -44,13 +45,16 @@ class EmbeddingsConfig(BaseModel):
 
 
 class ModelsConfig(BaseModel):
-    fast: str = "google/gemma-4-26b-a4b-it:free"
-    strong: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+    fast: str = "nvidia/nemotron-3-super-120b-a12b:free"  # alt: google/gemma-4-26b-a4b-it:free
+    strong: str = "nvidia/nemotron-3-ultra-550b-a55b:free"  # alt: poolside/laguna-s-2.1:free
+    strong_paid: str = "deepseek/deepseek-v4-pro-0813"  # used when use_paid_strong (or --paid)
+    use_paid_strong: bool = False
     fallback: list[str] = Field(default_factory=lambda: ["openrouter/free"])
     base_url: str = "https://openrouter.ai/api/v1"
     provider: str = "openai"  # langchain model_provider; any OpenAI-compatible endpoint works
     api_key_env: str = "OPENROUTER_API_KEY"
-    requests_per_minute: int = 20
+    requests_per_minute: int = 20  # client-side throttle (OpenRouter free models allow ~20/min)
+    max_retries: int = 2  # per model, by the OpenAI client (honors Retry-After), before falling back
 
 
 class LimitsConfig(BaseModel):
@@ -58,6 +62,7 @@ class LimitsConfig(BaseModel):
     max_grade_loops: int = 2
     max_answer_retries: int = 2
     daily_call_budget: int = 1000
+    expand_with_tools: bool = True  # let the fast model pick expand tools (else deterministic heuristics)
 
 
 class WebConfig(BaseModel):

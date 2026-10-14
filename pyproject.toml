@@ -13,12 +13,12 @@ dependencies = [
     "platformdirs>=4",
     "python-dotenv>=1.0",
     "pyyaml>=6",
-    "langgraph>=0.2.60",
+    "langgraph>=1.0",
     "langgraph-checkpoint-sqlite>=2.0",
-    "langchain>=0.3",
-    "langchain-openai>=0.2",
+    "langchain>=1.0",
+    "langchain-openai>=1.0",
     "fastembed>=0.4",
-    "pinecone>=5",
+    "langchain-pinecone>=0.2.13",
     "tree-sitter>=0.25,<0.26",
     "ddgs>=9",
     "tree-sitter-python>=0.25.0",
@@ -33,14 +33,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-chroma = ["chromadb>=0.5"]
+chroma = ["langchain-chroma>=1.0"]
 tavily = ["langchain-tavily>=0.1"]
 
 [project.scripts]
 haive = "haive.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6", "chromadb>=0.5"]
+dev = ["pytest>=8", "ruff>=0.6", "langchain-chroma>=1.0"]
 
 [build-system]
 requires = ["hatchling"]

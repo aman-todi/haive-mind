@@ -1,27 +1,45 @@
-"""Role-based chat models via OpenRouter (or any OpenAI-compatible endpoint), with fallback,
-429 backoff, throttling, and usage accounting."""
+"""Role-based chat models via OpenRouter (or any OpenAI-compatible endpoint).
+
+Built on LangChain primitives:
+- ``init_chat_model`` builds each model, with a shared ``InMemoryRateLimiter`` (client-side
+  throttle) and the OpenAI client's own retries, which honor ``Retry-After`` on 429s;
+- ``.with_fallbacks()`` moves down the fallback chain when a model keeps failing;
+- the ``Meter`` callback handler counts calls, enforces the per-question budget, and records usage.
+"""
 
 from __future__ import annotations
 
 import os
-import time
 from collections.abc import Callable
 from typing import Any
 
+import openai
+from langchain_core.exceptions import OutputParserException
+from langchain_core.language_models import BaseChatModel
+from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_core.runnables import Runnable, RunnableConfig
+from pydantic import ValidationError
+
 from haive.config import Config
 from haive.db import DB
-from haive.llm.budget import BudgetExceeded, Meter, RateLimiter
-from haive.types import ChatModel
+from haive.llm.budget import BudgetExceeded, Meter
 
-MAX_BACKOFF = 20.0
-RATE_LIMIT_RETRIES = 2
+# Errors that mean "this model didn't work out, try the next one". BudgetExceeded is deliberately
+# not here: it must stop the whole chain.
+RECOVERABLE: tuple[type[BaseException], ...] = (
+    openai.APIError,  # rate limits after the client's retries, 5xx, 4xx, timeouts, connection errors
+    OutputParserException,
+    ValidationError,
+    ValueError,
+    NotImplementedError,
+)
 
 
 class LLMError(RuntimeError):
     pass
 
 
-def get_model(model_id: str, cfg: Config) -> ChatModel:
+def get_model(model_id: str, cfg: Config, rate_limiter: InMemoryRateLimiter | None = None) -> BaseChatModel:
     """Build a LangChain chat model for ``model_id`` from config."""
     from langchain.chat_models import init_chat_model
 
@@ -29,9 +47,11 @@ def get_model(model_id: str, cfg: Config) -> ChatModel:
     kwargs: dict[str, Any] = {
         "model_provider": m.provider,
         "temperature": 0,
-        "max_retries": 0,
+        "max_retries": m.max_retries,
         "timeout": 120,
     }
+    if rate_limiter is not None:
+        kwargs["rate_limiter"] = rate_limiter
     if m.base_url:
         kwargs["base_url"] = m.base_url
     key = os.environ.get(m.api_key_env)
@@ -45,116 +65,75 @@ def get_model(model_id: str, cfg: Config) -> ChatModel:
     return init_chat_model(model_id, **kwargs)
 
 
-def status_code(err: BaseException) -> int | None:
-    code = getattr(err, "status_code", None)
-    if code is None:
-        resp = getattr(err, "response", None)
-        code = getattr(resp, "status_code", None)
-    try:
-        return int(code) if code is not None else None
-    except (TypeError, ValueError):
+def make_rate_limiter(requests_per_minute: int) -> InMemoryRateLimiter | None:
+    if requests_per_minute <= 0:
         return None
-
-
-def retry_after(err: BaseException) -> float | None:
-    resp = getattr(err, "response", None)
-    headers = getattr(resp, "headers", None) or {}
-    try:
-        val = headers.get("retry-after") or headers.get("Retry-After")
-        return float(val) if val is not None else None
-    except (TypeError, ValueError, AttributeError):
-        return None
-
-
-def is_rate_limit(err: BaseException) -> bool:
-    return status_code(err) == 429 or "rate limit" in str(err).lower() or "429" in str(err)[:40]
-
-
-def is_server_error(err: BaseException) -> bool:
-    code = status_code(err)
-    return code is not None and code >= 500
+    return InMemoryRateLimiter(
+        requests_per_second=requests_per_minute / 60, check_every_n_seconds=0.1, max_bucket_size=3
+    )
 
 
 class LLM:
     """Entry point for all LLM calls. ``factory`` builds a model from an id (tests inject fakes)."""
 
     def __init__(
-        self,
-        cfg: Config,
-        db: DB | None = None,
-        factory: Callable[[str], ChatModel] | None = None,
-        *,
-        sleep: Callable[[float], None] = time.sleep,
-        limiter: RateLimiter | None = None,
+        self, cfg: Config, db: DB | None = None, factory: Callable[[str], BaseChatModel] | None = None
     ):
         self.cfg = cfg
         self.db = db
-        self.factory = factory or (lambda mid: get_model(mid, cfg))
-        self.sleep = sleep
-        self.limiter = limiter or RateLimiter(cfg.models.requests_per_minute, sleep=sleep)
-        self._models: dict[str, ChatModel] = {}
-        self.no_native: set[str] = set()  # models whose native structured output failed
+        self.rate_limiter = make_rate_limiter(cfg.models.requests_per_minute)
+        self.factory = factory or (lambda mid: get_model(mid, cfg, self.rate_limiter))
+        self._models: dict[str, BaseChatModel] = {}
+        self._chains: dict[Any, Runnable] = {}
 
-    def model(self, model_id: str) -> ChatModel:
+    # ------------------------------------------------------------ models
+
+    def model(self, model_id: str) -> BaseChatModel:
         if model_id not in self._models:
             self._models[model_id] = self.factory(model_id)
         return self._models[model_id]
 
-    def chain(self, role: str) -> list[str]:
-        primary = getattr(self.cfg.models, role)
-        out = [primary]
+    def primary(self, role: str) -> str:
+        m = self.cfg.models
+        if role == "strong" and m.use_paid_strong:
+            return m.strong_paid
+        return getattr(m, role)
+
+    def model_ids(self, role: str) -> list[str]:
+        out = [self.primary(role)]
         for f in self.cfg.models.fallback:
             if f not in out:
                 out.append(f)
         return out
 
-    def _record(self, role: str, model_id: str, msg: Any = None, error: bool = False) -> None:
-        if self.db is None:
-            return
-        usage = getattr(msg, "usage_metadata", None) or {}
-        self.db.record_usage(
-            role,
-            model_id,
-            int(usage.get("input_tokens", 0) or 0),
-            int(usage.get("output_tokens", 0) or 0),
-            error,
-        )
+    def with_fallbacks(
+        self, role: str, build: Callable[[BaseChatModel], Runnable], key: Any = None
+    ) -> Runnable:
+        """``build(model)`` for each model in the role's chain, joined with ``.with_fallbacks()``.
+        Cached per (role, models, key) so repeated calls reuse the same runnable."""
+        ids = tuple(self.model_ids(role))
+        cache_key = (role, ids, key)
+        if cache_key not in self._chains:
+            runnables = [build(self.model(mid)) for mid in ids]
+            chain = runnables[0]
+            if len(runnables) > 1:
+                chain = chain.with_fallbacks(runnables[1:], exceptions_to_handle=RECOVERABLE)
+            self._chains[cache_key] = chain
+        return self._chains[cache_key]
 
-    def invoke_once(self, role: str, model_id: str, runnable: Any, messages: Any, meter: Meter) -> Any:
-        """One metered model call with 429 backoff (raises after RATE_LIMIT_RETRIES)."""
-        attempt = 0
-        while True:
-            meter.check()
-            self.limiter.acquire()
-            t0 = time.monotonic()
-            try:
-                out = runnable.invoke(messages)
-            except Exception as e:
-                meter.record(
-                    role, model_id, (time.monotonic() - t0) * 1000, False, f"{type(e).__name__}: {e}"
-                )
-                self._record(role, model_id, error=True)
-                if is_rate_limit(e) and attempt < RATE_LIMIT_RETRIES:
-                    wait = retry_after(e)
-                    wait = min(MAX_BACKOFF, wait if wait is not None else 2.0 * (2**attempt))
-                    self.sleep(wait)
-                    attempt += 1
-                    continue
-                raise
-            raw = out.get("raw") if isinstance(out, dict) and "raw" in out else out
-            meter.record(role, model_id, (time.monotonic() - t0) * 1000, True)
-            self._record(role, model_id, raw)
-            return out
+    def run_config(self, role: str, meter: Meter) -> RunnableConfig:
+        meter.db = self.db
+        return {"callbacks": [meter], "metadata": {"haive_role": role}, "run_name": f"haive.{role}"}
+
+    # ------------------------------------------------------------ calls
 
     def text(self, role: str, messages: Any, meter: Meter) -> str:
         """Plain-text completion with fallback down the chain."""
-        last: Exception | None = None
-        for model_id in self.chain(role):
-            try:
-                msg = self.invoke_once(role, model_id, self.model(model_id), messages, meter)
-                return msg.content if isinstance(msg.content, str) else str(msg.content)
-            except BudgetExceeded:
-                raise
-            except Exception as e:
-                last = e
-        raise LLMError(f"all models failed for role {role}: {last}")
+        chain = self.with_fallbacks(role, lambda m: m, key="text")
+        try:
+            msg = chain.invoke(messages, config=self.run_config(role, meter))
+        except BudgetExceeded:
+            raise
+        except Exception as e:  # any provider failure degrades the caller, never crashes the graph
+            raise LLMError(f"all models failed for role {role}: {type(e).__name__}: {e}") from e
+        return msg.content if isinstance(msg.content, str) else str(msg.content)

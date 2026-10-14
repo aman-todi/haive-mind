@@ -95,7 +95,6 @@ class CommitInfo(BaseModel):
     files: list[str] = Field(default_factory=list)
     insertions: int = 0
     deletions: int = 0
-    diff: str = ""
 
 
 class RepoProfile(BaseModel):

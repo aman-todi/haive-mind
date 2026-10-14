@@ -1,20 +1,22 @@
-"""Pinecone adapter (default backend). Uses the ``pinecone`` client directly."""
+"""Pinecone adapter (default backend): ``langchain_pinecone.PineconeVectorStore`` for vectors, plus the
+``pinecone`` client for index creation, checks, and counts."""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
-from haive.index.embed import embed_chunks
-from haive.store.base import UPSERT_BATCH, clean_metadata, hit_from, normalize_filter
-from haive.types import Chunk, Embedder, Hit
+from langchain_core.documents import Document
+
+from haive.store.base import LangChainStore, normalize_filter
+from haive.types import Embedder
 
 
 class PineconeError(RuntimeError):
     pass
 
 
-class PineconeStore:
+class PineconeStore(LangChainStore):
     def __init__(
         self,
         embedder: Embedder,
@@ -37,9 +39,19 @@ class PineconeStore:
                 raise PineconeError("PINECONE_API_KEY is not set")
             client = Pinecone(api_key=key)
         self.pc = client
-        self._index = None
+        self._vs = None
 
-    # ------------------------------------------------------------ admin
+    @property
+    def vs(self):  # created lazily so `haive init` can create the index first
+        if self._vs is None:
+            from langchain_pinecone import PineconeVectorStore
+
+            self._vs = PineconeVectorStore(index=self.index, embedding=self.embedder, text_key="text")
+        return self._vs
+
+    @property
+    def index(self) -> Any:
+        return self.pc.Index(self.index_name)
 
     def ensure_index(self) -> bool:
         """Create the index if missing and check its dimension. Returns True if it was created."""
@@ -68,55 +80,18 @@ class PineconeStore:
             )
         return created
 
-    @property
-    def index(self) -> Any:
-        if self._index is None:
-            self._index = self.pc.Index(self.index_name)
-        return self._index
-
-    # ------------------------------------------------------------ VectorStore
-
-    def upsert(self, chunks: list[Chunk]) -> None:
-        for i in range(0, len(chunks), UPSERT_BATCH):
-            batch = chunks[i : i + UPSERT_BATCH]
-            vecs = embed_chunks(self.embedder, batch)
-            self.index.upsert(
-                vectors=[
-                    {"id": c.id, "values": v, "metadata": clean_metadata(c)}
-                    for c, v in zip(batch, vecs, strict=True)
-                ]
-            )
-
-    def delete(self, ids: list[str]) -> None:
-        for i in range(0, len(ids), 1000):
-            self.index.delete(ids=ids[i : i + 1000])
-
-    def search(self, query: str, k: int, filter: dict[str, Any] | None = None) -> list[Hit]:
-        f = normalize_filter(filter)
-        res = self.index.query(
-            vector=self.embedder.embed_query(query), top_k=k, filter=f or None, include_metadata=True
-        )
-        matches = res["matches"] if isinstance(res, dict) else res.matches
-        out = []
-        for m in matches:
-            mid = m["id"] if isinstance(m, dict) else m.id
-            score = m["score"] if isinstance(m, dict) else m.score
-            meta = (m["metadata"] if isinstance(m, dict) else m.metadata) or {}
-            out.append(hit_from(mid, score, meta))
-        return out
+    def _scored(self, query: str, k: int, filter: Any) -> list[tuple[Document, float]]:
+        return self.vs.similarity_search_with_score(query, k=k, filter=filter)  # cosine similarity
 
     def count(self, filter: dict[str, Any] | None = None) -> int:
         """Total, or per-repo via id prefix (serverless indexes can't count by metadata filter)."""
         f = normalize_filter(filter)
+        index = self.index
         if not f:
-            stats = self.index.describe_index_stats()
+            stats = index.describe_index_stats()
             total = stats["total_vector_count"] if isinstance(stats, dict) else stats.total_vector_count
             return int(total)
         if set(f) != {"repo"}:
             raise ValueError("PineconeStore.count only supports a repo filter")
         repos = f["repo"].get("$in") or [f["repo"].get("$eq")]
-        n = 0
-        for repo in repos:
-            for page in self.index.list(prefix=f"{repo}:"):
-                n += len(page)
-        return n
+        return sum(len(page) for repo in repos for page in index.list(prefix=f"{repo}:"))

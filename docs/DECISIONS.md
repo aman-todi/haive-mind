@@ -5,11 +5,14 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
 1. **Worked alone, in wave order.** No parallel sessions were used; tickets were built T0 → T14
    sequentially, with the shared contracts in `types.py` written first.
 
-2. **Embeddings and stores use their libraries directly** (`fastembed`, `pinecone`, `chromadb`) instead of
-   `langchain-community` / `langchain-pinecone` / `langchain-chroma`. `langchain-community` now warns that
-   it is being sunset, and the LangChain store wrappers embed the stored text, while the spec wants the
-   location header in the embedding only and the raw chunk as stored text. The Chroma adapter is still one
-   file, and the store interface is the spec's `upsert/delete/search/count`.
+2. **LangChain where it's as good as or better than hand-written code** (revised; originally the stores
+   and LLM plumbing were hand-written). Now: `langchain-pinecone` / `langchain-chroma` /
+   `InMemoryVectorStore` behind a thin adapter, `Embeddings` subclasses over fastembed, `init_chat_model`
+   with `InMemoryRateLimiter`, `.with_fallbacks()`, LCEL structured output, `ChatPromptTemplate`s, a
+   callback handler for metering, and `@tool`s + `ToolNode` for expand. fastembed is still called
+   directly, not via LangChain's `FastEmbedEmbeddings`: that lives in `langchain-community`, which is
+   being sunset. To keep the location header in the embedding but return raw chunk text,
+   `page_content` holds the header + chunk and `metadata.header_lines` tells the adapter what to strip.
 
 3. **Tree-sitter: per-language grammar wheels, `tree-sitter>=0.25,<0.26`.** `tree-sitter-language-pack`
    1.x downloads grammars at runtime, and the combination with `tree-sitter` 0.26.0 segfaulted (heap
@@ -38,16 +41,23 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
 8. **Leftover top-level statements** become one `<module>` chunk per contiguous run rather than one
    concatenated chunk, so every chunk's line range is exact and citable.
 
-9. **Commit chunks have no path or lines** (`path=""`, lines 0). They inform history answers, but repo
-   claims must cite file lines (from symbol evidence or `git log -L` context). The prompt says so.
+9. **Commit chunks: last 300, messages only.** No diff text (revised from the spec's small-diff rule):
+   code-level history comes from `git log -S`, `--grep`, and `-L` at question time, so diffs mostly
+   cost embedding time. Chunks hold subject, body, author, date, changed files, and line counts; they
+   have no path or lines (`path=""`), so repo claims cite file lines instead. Commits whose message
+   matches the secret patterns keep their `commits` row but get no chunk.
 
 10. **Budget reserve.** Grade, rewrite, and per-repo summaries leave one call for the answer. With nothing
     left, the answer node builds an evidence-only answer in code (every claim cites real evidence).
 
-11. **Structured output order:** native (function calling) → JSON-mode prompt → JSON repair, two tries
-    per model (the second with the validation error), then the fallback chain. Models whose native mode
-    fails are remembered for the process. 429s honor `Retry-After` with a 20 s cap, two retries, then
-    fallback; 5xx falls back immediately. A sliding-window limiter keeps under 20 requests/minute.
+11. **Structured output and retries (revised).** Per model: native `with_structured_output`
+    (function calling) → JSON prompt with `PydanticOutputParser` format instructions and a cheap local
+    cleanup (strip prose/fences, trailing commas) → one repair retry that feeds the parse error back
+    (`with_fallbacks(exception_key="error")`), then `.with_fallbacks()` to the next model.
+    `OutputFixingParser` was not used: in LangChain 1.x it only lives in the legacy `langchain-classic`
+    package. 429s are retried by the OpenAI client (`max_retries=2`), which honors `Retry-After`; this
+    replaces the spec's hand-rolled 20 s-capped backoff. A shared `InMemoryRateLimiter` (20/min) throttles
+    client-side. Any failure outside the budget degrades the node (`LLMError`) instead of crashing.
 
 12. **Ephemeral threads.** `ask`/`debug` run on a throwaway thread id in the same SQLite saver and delete
     it afterwards; only `chat` threads get titles and rows in `threads`.
@@ -83,3 +93,18 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     input is capped at 6,000 characters (chunks are capped near that anyway).
 
 21. **The spec lives at `docs/spec.md`**, not the repo root.
+
+22. **Model defaults (Oct 2026, from OpenRouter's live list).** fast = `nvidia/nemotron-3-super-120b-a12b:free`
+    (native JSON-schema output + tools), strong = `nvidia/nemotron-3-ultra-550b-a55b:free`; alternatives
+    `google/gemma-4-26b-a4b-it:free` and `poolside/laguna-s-2.1:free`. Paid strong option
+    `deepseek/deepseek-v4-pro-0813`, off by default (`use_paid_strong`, or `--paid` per command); it only
+    changes the strong role.
+
+23. **Expand is a tool-calling subgraph** (`plan` → `ToolNode`), one planning call, at most 4 tool calls.
+    It only uses the model when the budget still covers plan + grade + answer; otherwise (or with
+    `limits.expand_with_tools = false`, or a model without tool calling) heuristics build the same tool
+    calls. Tools capture the indexed file list up front so they never share the SQLite connection
+    across `ToolNode`'s threads.
+
+24. **Chat history goes to the router and answer as messages** (`MessagesPlaceholder("history")`, last 6),
+    not as pasted text.
