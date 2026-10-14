@@ -119,3 +119,27 @@ def test_chunk_ids_stable():
     b = chunk_code("r", "a.py", PY, "python")
     assert [c.id for c in a] == [c.id for c in b]
     assert all(c.id.startswith("r:a.py:") for c in a)
+
+
+def test_stress_real_sources_no_crash():
+    """Regression: tree-sitter 0.26.0 corrupted the heap on larger files. Chunk this repo's own
+    sources repeatedly in a subprocess so a segfault fails the test instead of killing pytest."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    code = (
+        "import sys; from pathlib import Path; from haive.index.chunk_code import chunk_code\n"
+        "from haive.tools.files import window\n"
+        "files = sorted(Path('src').rglob('*.py')) + sorted(Path('tests').rglob('*.py'))\n"
+        "n = 0\n"
+        "for _ in range(3):\n"
+        "    for f in files:\n"
+        "        n += len(chunk_code('r', str(f), f.read_text(), 'python'))\n"
+        "        window(Path('.'), str(f), 40)\n"
+        "print(n)\n"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, timeout=300)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert int(proc.stdout.strip()) > 500

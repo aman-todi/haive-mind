@@ -23,20 +23,23 @@ TRACES = Path(__file__).parent.parent / "fixtures" / "traces"
 
 def snapshot(root: Path) -> dict:
     """Everything the read-only guarantee covers: git status, and mtimes of every file incl. .git."""
-    status = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--ignored"], capture_output=True,
-                            text=True).stdout  # fmt: skip
+    status = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--ignored"], capture_output=True, text=True
+    ).stdout
     mtimes = {str(p.relative_to(root)): p.stat().st_mtime_ns for p in root.rglob("*") if p.is_file()}
     return {"status": status, "mtimes": mtimes}
 
 
 @pytest.fixture
 def cli(monkeypatch, haive_home):
-    fake = FakeChatModel({
-        "RouterOutput": [router("lookup", identifiers=["choose_method"])],
-        "GradeOutput": [grade()],
-        "Answer": [answer(DCF_CLAIM)],
-        "text": ["Where the DCF picks its method"],
-    })  # fmt: skip
+    fake = FakeChatModel(
+        {
+            "RouterOutput": [router("lookup", identifiers=["choose_method"])],
+            "GradeOutput": [grade()],
+            "Answer": [answer(DCF_CLAIM)],
+            "text": ["Where the DCF picks its method"],
+        }
+    )
     monkeypatch.setattr(
         Runtime, "llm", property(lambda self: LLM(self.cfg, self.db, factory_for(fake), sleep=lambda s: None))
     )
@@ -91,11 +94,19 @@ def test_full_flow_is_read_only(cli, sample_repo, other_repo):
     assert "[repo]" in res.output and "valuation/app/valuation/dcf.py:1-7" in res.output
     assert "graph trace" in res.output and "router" in res.output
 
-    cli.fake.script["Answer"] = [{
-        "summary": "fcf missing", "sections": [],
-        "hypotheses": [{"title": "missing key", "confidence": "high",
-                        "claims": [repo_claim("app/valuation/dcf.py", 5, 5, text="indexes fcf")]}],
-    }]  # fmt: skip
+    cli.fake.script["Answer"] = [
+        {
+            "summary": "fcf missing",
+            "sections": [],
+            "hypotheses": [
+                {
+                    "title": "missing key",
+                    "confidence": "high",
+                    "claims": [repo_claim("app/valuation/dcf.py", 5, 5, text="indexes fcf")],
+                }
+            ],
+        }
+    ]
     res = cli("debug", str(TRACES / "python_chained.txt"), "--json", "--web", "off")
     data = json.loads(res.output)
     assert data["intent"] == "debug" and data["answer"]["hypotheses"][0]["confidence"] == "high"
@@ -124,8 +135,21 @@ def test_sync_pulls_then_indexes(cli, sample_repo, tmp_path):
     setup_repo_at(cli, clone)
     (sample_repo / "NEW.md").write_text("# new upstream doc\n")
     subprocess.run(["git", "-C", str(sample_repo), "add", "NEW.md"], check=True)
-    subprocess.run(["git", "-C", str(sample_repo), "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-qm",
-                    "upstream change"], check=True)  # fmt: skip
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(sample_repo),
+            "-c",
+            "user.name=x",
+            "-c",
+            "user.email=x@x",
+            "commit",
+            "-qm",
+            "upstream change",
+        ],
+        check=True,
+    )
     out = cli("sync").output
     assert "valuation:" in out and "+1/-0 commits" in out
     assert (clone / "NEW.md").exists()

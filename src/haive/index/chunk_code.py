@@ -21,17 +21,18 @@ CHARS_PER_TOKEN = 4
 WINDOW_LINES = 60
 WINDOW_OVERLAP = 10
 
-TS_NAME = {
-    "python": "python",
-    "javascript": "javascript",
-    "typescript": "typescript",
-    "tsx": "tsx",
-    "go": "go",
-    "rust": "rust",
-    "java": "java",
-    "c": "c",
-    "cpp": "cpp",
-    "csharp": "csharp",
+# language -> (grammar module, function returning the language pointer)
+TS_GRAMMARS = {
+    "python": ("tree_sitter_python", "language"),
+    "javascript": ("tree_sitter_javascript", "language"),
+    "typescript": ("tree_sitter_typescript", "language_typescript"),
+    "tsx": ("tree_sitter_typescript", "language_tsx"),
+    "go": ("tree_sitter_go", "language"),
+    "rust": ("tree_sitter_rust", "language"),
+    "java": ("tree_sitter_java", "language"),
+    "c": ("tree_sitter_c", "language"),
+    "cpp": ("tree_sitter_cpp", "language"),
+    "csharp": ("tree_sitter_c_sharp", "language"),
 }
 
 
@@ -121,16 +122,29 @@ _FUNC_VALUES = {"arrow_function", "function_expression", "function", "class", "g
 
 
 @lru_cache(maxsize=32)
-def get_parser(language: str) -> Any | None:
-    name = TS_NAME.get(language)
-    if not name:
+def get_language(language: str) -> Any | None:
+    spec = TS_GRAMMARS.get(language)
+    if not spec:
         return None
     try:
-        from tree_sitter_language_pack import get_parser as _gp
+        import importlib
 
-        return _gp(name)
+        from tree_sitter import Language
+
+        mod = importlib.import_module(spec[0])
+        return Language(getattr(mod, spec[1])())
     except Exception:
         return None
+
+
+def get_parser(language: str) -> Any | None:
+    """A new parser per call: parsers are not thread-safe (languages are, and are cached)."""
+    lang = get_language(language)
+    if lang is None:
+        return None
+    from tree_sitter import Parser
+
+    return Parser(lang)
 
 
 def _text(node: Any) -> str:
@@ -349,7 +363,8 @@ def chunk_code(repo: str, path: str, text: str, language: str) -> list[Chunk]:
     if parser is None or spec is None:
         return window_chunks(repo, path, lines, "code", language)
     try:
-        tree = parser.parse(text.encode("utf-8"))
+        src = text.encode("utf-8")  # keep the buffer alive while nodes read from it
+        tree = parser.parse(src)
     except Exception:
         return window_chunks(repo, path, lines, "code", language)
 

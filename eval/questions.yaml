@@ -1,0 +1,13 @@
+# Eval suite for YOUR registered repos (drafted by Claude Code from them; see the README).
+# About 30 questions, 4-5 per intent. Fields:
+#   id, question, repos (optional scope), expected_intent, expected_files (repo/path that must
+#   appear among verified repo refs), notes. Debug cases add trace_file and expected_line and
+#   come from bug injection (eval/inject_bugs.py) on temp copies, never your repos.
+#
+# Example:
+# - id: lookup-dcf-method
+#   question: Where does the DCF choose a valuation method?
+#   repos: [valuation-backend]
+#   expected_intent: lookup
+#   expected_files: [valuation-backend/app/valuation/dcf.py]
+[]

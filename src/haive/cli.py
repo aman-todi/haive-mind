@@ -86,8 +86,6 @@ PINECONE_API_KEY=
 # TAVILY_API_KEY=
 """
 
-GRAMMARS = ["python", "javascript", "typescript", "tsx", "go", "rust", "java", "c", "cpp", "csharp"]
-
 
 def check_openrouter(cfg: Config) -> tuple[bool, str]:
     key = os.environ.get(cfg.models.api_key_env)
@@ -173,15 +171,15 @@ def init(
         f"{'[green]✓' if shutil.which('rg') else '[yellow]!'}[/] ripgrep "
         f"{'found' if shutil.which('rg') else 'not found (slow Python fallback will be used)'}"
     )
-    try:
-        import tree_sitter_language_pack as tslp
+    from haive.index.chunk_code import TS_GRAMMARS, get_language
 
-        tslp.prefetch(GRAMMARS)
-        console.print("[green]✓[/] tree-sitter grammars cached")
-    except Exception as e:
+    missing = [lang for lang in TS_GRAMMARS if get_language(lang) is None]
+    if missing:
         console.print(
-            f"[yellow]![/] tree-sitter grammars: {escape(str(e))} (line-window chunking will be used)"
+            f"[yellow]![/] tree-sitter grammars missing for {', '.join(missing)} (line windows used)"
         )
+    else:
+        console.print("[green]✓[/] tree-sitter grammars available")
     console.print(
         "\nNext: [bold]haive add <path|git-url>[/], then [bold]haive index[/]. The first index downloads the "
         f"embedding model ({cfg.embeddings.model}).\nCheck that the default free models in {cfg_path} still exist "
@@ -788,6 +786,9 @@ def eval_cmd(
         list[str] | None, typer.Option("--models", help="ROLE=MODEL overrides (repeatable).")
     ] = None,
     limit: Annotated[int | None, typer.Option("--limit", help="Only the first N questions.")] = None,
+    setup_sample: Annotated[
+        bool, typer.Option("--setup-sample", help="Build and register the bundled sample repos + bug cases.")
+    ] = False,
 ) -> None:
     """Run the eval suite (dev command; needs a source checkout)."""
     root = Path(__file__).resolve().parents[2]
@@ -803,7 +804,18 @@ def eval_cmd(
             fail(f"--models expects fast=MODEL or strong=MODEL, got {m!r}")
         overrides[role] = mid
     t0 = time.monotonic()
-    out = eval_main(suite=suite, ablation=ablation, model_overrides=overrides, limit=limit, console=console)
+    try:
+        out = eval_main(
+            suite=suite,
+            ablation=ablation,
+            model_overrides=overrides,
+            limit=limit,
+            console=console,
+            runtime=runtime(),
+            setup_sample=setup_sample,
+        )
+    except ValueError as e:
+        fail(str(e))
     console.print(f"[green]✓[/] results in {out} ({time.monotonic() - t0:.0f}s)")
 
 

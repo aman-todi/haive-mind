@@ -1,0 +1,45 @@
+# Sample suite template for the bundled sample repo. `haive eval --setup-sample` builds the repos,
+# injects bugs, and writes the full suite (these questions plus the debug cases) to the data dir.
+- id: lookup-choose-method
+  question: Where does the DCF choose a valuation method?
+  repos: [eval-sample]
+  expected_intent: lookup
+  expected_files: [eval-sample/app/valuation/dcf.py]
+- id: lookup-fetch-user
+  question: How does the API client fetch a user?
+  repos: [eval-sample]
+  expected_intent: lookup
+  expected_files: [eval-sample/app/api/client.py]
+- id: lookup-routes
+  question: Which HTTP routes does the server expose?
+  repos: [eval-sample]
+  expected_intent: lookup
+  expected_files: [eval-sample/app/server.py]
+- id: lookup-billing
+  question: How is the billing total computed?
+  repos: [eval-sample]
+  expected_intent: lookup
+  expected_files: [eval-sample/src/main/java/com/acme/Billing.java]
+- id: recall-http
+  question: How did I call an HTTP API with retries before?
+  expected_intent: recall
+  expected_files: [eval-sample/app/api/client.py]
+- id: history-retries
+  question: When and why did I add retries to the API client?
+  repos: [eval-sample]
+  expected_intent: history
+  expected_files: [eval-sample/app/api/client.py]
+  notes: commit "Add retries to the API client" explains the flaky upstream API
+- id: architecture-sample
+  question: Break down the architecture of eval-sample
+  repos: [eval-sample]
+  expected_intent: architecture
+  expected_files: [eval-sample/docker-compose.yml, eval-sample/README.md]
+- id: compare-deploy
+  question: How do eval-sample and eval-sample-bugs differ in the valuation code?
+  expected_intent: compare
+  expected_files: [eval-sample/app/valuation/dcf.py, eval-sample-bugs/app/valuation/dcf.py]
+- id: general-pagination
+  question: How do I paginate results in FastAPI in general?
+  expected_intent: general
+  expected_files: []

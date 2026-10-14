@@ -29,7 +29,8 @@ class Runtime:
 
     @cached_property
     def embedder(self) -> Embedder:
-        return make_embedder(self.cfg.embeddings.model, self.cfg.embeddings.dim)
+        e = self.cfg.embeddings
+        return make_embedder(e.model, e.dim, e.batch_size)
 
     @cached_property
     def store(self) -> VectorStore:

@@ -1,0 +1,62 @@
+# Bug specs for the bundled sample repo (see eval/sample.py). Each replacement is line-count neutral.
+# Python commands stub third-party modules so no dependencies are needed.
+- id: missing-key
+  file: app/valuation/dcf.py
+  find: 'company.get("dividends")'
+  replace: 'company["dividends"]'
+  command: >-
+    python3 -c "from app.valuation.dcf import choose_method; choose_method({'fcf': 1})"
+  cause: dividends is optional but is now indexed directly
+  requires: python3
+- id: off-by-one
+  file: app/valuation/dcf.py
+  find: "total += cf / (1 + rate) ** i"
+  replace: "total += cashflows[i] / (1 + rate) ** i"
+  command: >-
+    python3 -c "from app.valuation.dcf import discount; print(discount([1.0, 2.0], 0.1))"
+  cause: indexes cashflows with the 1-based period number, overrunning the list on the last period
+  requires: python3
+- id: bad-import
+  file: app/server.py
+  find: "from app.valuation.dcf import choose_method"
+  replace: "from app.valuation.dfc import choose_method"
+  command: >-
+    python3 -c "import sys, types; d = lambda *a, **k: (lambda f: f);
+    sys.modules['fastapi'] = types.SimpleNamespace(FastAPI=lambda: types.SimpleNamespace(get=d, post=d));
+    import app.server"
+  cause: typo in the module name (dfc instead of dcf)
+  requires: python3
+- id: renamed-env-var
+  file: app/api/client.py
+  find: 'API_URL = os.environ.get("API_URL", "http://localhost:8000")'
+  replace: 'API_URL = os.environ["API_BASE_URL"]'
+  command: >-
+    python3 -c "import sys, types; sys.modules['requests'] = types.ModuleType('requests'); import app.api.client"
+  cause: the client reads API_BASE_URL, but the deployment (compose, .env.example) sets API_URL
+  requires: python3
+- id: none-check
+  file: app/valuation/dcf.py
+  find: "    if company[\"fcf\"] > 0:"
+  replace: "    if company.get(\"fcf\") > 0:"
+  command: >-
+    python3 -c "from app.valuation.dcf import choose_method; choose_method({})"
+  cause: missing None check; fcf may be absent and None > 0 raises TypeError
+  requires: python3
+- id: nil-pointer
+  file: cmd/worker/main.go
+  find: "j := &Job{ID: 1}"
+  replace: "var j *Job"
+  command: >-
+    go run cmd/worker/main.go
+  cause: the job is never constructed, so Run dereferences a nil receiver
+  requires: go
+- id: java-off-by-one
+  file: src/main/java/com/acme/Billing.java
+  find: "i < items.length"
+  replace: "i <= items.length"
+  command: >-
+    d=$(mktemp -d) && javac -d "$d" src/main/java/com/acme/Billing.java &&
+    printf 'public class Main { public static void main(String[] a) { new com.acme.Billing().total(new int[]{1,2}); } }'
+    > "$d/Main.java" && javac -cp "$d" -d "$d" "$d/Main.java" && java -cp "$d" Main
+  cause: loop bound uses <= and reads one past the end of the array
+  requires: javac

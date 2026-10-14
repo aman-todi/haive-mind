@@ -12,10 +12,13 @@ from collections.abc import Iterator
 
 from haive.types import Chunk, Embedder
 
+# Chunks are capped at ~1,500 tokens; cap embedding input too, so attention memory stays bounded.
+MAX_EMBED_CHARS = 6000
+
 
 class FastEmbedder:
     def __init__(
-        self, model: str = "jinaai/jina-embeddings-v2-base-code", dim: int = 768, batch_size: int = 32
+        self, model: str = "jinaai/jina-embeddings-v2-base-code", dim: int = 768, batch_size: int = 8
     ):
         self.model_name = model
         self.dim = dim
@@ -31,10 +34,11 @@ class FastEmbedder:
         return self._model
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        texts = [t[:MAX_EMBED_CHARS] for t in texts]
         return [v.tolist() for v in self.model.embed(texts, batch_size=self.batch_size)]
 
     def embed_query(self, text: str) -> list[float]:
-        return next(iter(self.model.query_embed(text))).tolist()
+        return next(iter(self.model.query_embed(text[:MAX_EMBED_CHARS]))).tolist()
 
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
@@ -78,7 +82,7 @@ def embed_chunks(embedder: Embedder, chunks: list[Chunk], batch: int = 64) -> li
     return out
 
 
-def make_embedder(model: str, dim: int) -> Embedder:
+def make_embedder(model: str, dim: int, batch_size: int = 8) -> Embedder:
     if model == "hash":
         return HashEmbedder(dim)
-    return FastEmbedder(model, dim)
+    return FastEmbedder(model, dim, batch_size)

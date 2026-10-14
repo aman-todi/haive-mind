@@ -80,7 +80,8 @@ def enclosing(root: Path, rel: str, line: int) -> tuple[int, int, str] | None:
     text = read_text(root, rel)
     if parser is None or text is None:
         return None
-    tree = parser.parse(text.encode("utf-8"))
+    src = text.encode("utf-8")  # keep the buffer alive while nodes read from it
+    tree = parser.parse(src)
     row = line - 1
     types = _def_types(language)
     node: Any = tree.root_node.named_descendant_for_point_range((row, 0), (row, 0))

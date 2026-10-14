@@ -40,6 +40,7 @@ class VectorStoreConfig(BaseModel):
 class EmbeddingsConfig(BaseModel):
     model: str = "jinaai/jina-embeddings-v2-base-code"
     dim: int = 768
+    batch_size: int = 8  # lower it if indexing runs out of memory
 
 
 class ModelsConfig(BaseModel):
