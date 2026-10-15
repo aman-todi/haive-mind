@@ -16,7 +16,7 @@ def test_config_roundtrip(tmp_path):
     loaded = load_config(p)
     assert loaded.repos["a"].path == "~/code/a"
     assert loaded.groups == {"g": ["a"]}
-    assert loaded.limits.max_llm_calls_per_question == 12
+    assert loaded.limits.max_llm_calls_per_question == 16
     assert "api_key =" not in p.read_text()  # secrets never land in config.toml
 
 

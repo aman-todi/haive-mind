@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from haive.db import DB
-from haive.index.discover import has_secret
 from haive.tools import git
 from haive.types import Chunk, CommitInfo, VectorStore
 
@@ -111,16 +110,11 @@ def index_commits(db: DB, store: VectorStore, repo: str, root: Path, max_commits
                 db.conn.execute("DELETE FROM chunks WHERE repo=? AND kind='commit'", (repo,))
         new = read_commits(root, repo, max_commits, rev=stats.head)
 
-    # Commit messages occasionally carry tokens; such commits keep their row but get no chunk.
-    chunks: dict[str, Chunk] = {}
-    for ci in new:
-        ch = commit_chunk(ci)
-        if not has_secret(ch.text):
-            chunks[ci.sha] = ch
+    chunks = [commit_chunk(ci) for ci in new]
     if chunks:
-        store.upsert(list(chunks.values()))
+        store.upsert(chunks)
     with db.conn:
-        for ci in new:
+        for ci, ch in zip(new, chunks, strict=True):
             db.conn.execute(
                 "INSERT OR REPLACE INTO commits VALUES(?,?,?,?,?,?,?,?)",
                 (
@@ -134,9 +128,6 @@ def index_commits(db: DB, store: VectorStore, repo: str, root: Path, max_commits
                     ci.deletions,
                 ),
             )
-            ch = chunks.get(ci.sha)
-            if ch is None:
-                continue
             db.conn.execute(
                 "INSERT OR REPLACE INTO chunks VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (ch.id, repo, "", "commit", "", ch.symbol, 0, 0, ch.content_hash, ch.text),

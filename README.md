@@ -124,9 +124,10 @@ answer depends on external library behavior, or when a debug trace fails inside 
 
 ### Budgets
 
-Each question may use up to `max_llm_calls_per_question` (12) LLM calls; the grader and query rewriter
-always leave one for the answer. `haive status` shows today's calls against `daily_call_budget` (1,000,
-matching OpenRouter's free tier); haive warns at 90% and refuses new questions at 100% unless `--force`.
+Each question may use up to `max_llm_calls_per_question` (16) LLM calls; most use 3–5. The grader,
+query rewriter, and expand planner always leave room for the answer. `haive status` shows today's calls
+against `daily_call_budget` (1,000, matching OpenRouter's free tier); haive warns at 90% and refuses new
+questions at 100% unless `--force`.
 
 ## Configuration
 
@@ -163,7 +164,7 @@ max_retries = 2               # per model (honors Retry-After) before falling ba
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]
-max_llm_calls_per_question = 12
+max_llm_calls_per_question = 16
 max_grade_loops = 2
 max_answer_retries = 2
 daily_call_budget = 1000

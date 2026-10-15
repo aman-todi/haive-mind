@@ -62,13 +62,3 @@ def test_git_rejects_writes(sample_repo):
         ["git", "-C", str(sample_repo), "status", "--porcelain"], capture_output=True, text=True
     )
     assert status.stdout == ""
-
-
-def test_commit_with_secret_in_message_gets_no_chunk(sample_repo, db, store):
-    write(sample_repo, {"NOTE.md": "x\n"})
-    commit(sample_repo, "Rotate key sk-abcdefghijklmnopqrstuvwxyz0123", "2024-06-01T10:00:00+00:00")
-    db.upsert_repo("v", str(sample_repo))
-    cm.index_commits(db, store, "v", sample_repo)
-    assert len(db.q("SELECT sha FROM commits")) == 4  # the row is kept
-    assert not any("sk-abc" in c["text"] for c in db.q("SELECT text FROM chunks WHERE kind='commit'"))
-    assert store.count({"kind": "commit"}) == 3

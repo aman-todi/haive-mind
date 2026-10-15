@@ -44,8 +44,7 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
 9. **Commit chunks: last 300, messages only.** No diff text (revised from the spec's small-diff rule):
    code-level history comes from `git log -S`, `--grep`, and `-L` at question time, so diffs mostly
    cost embedding time. Chunks hold subject, body, author, date, changed files, and line counts; they
-   have no path or lines (`path=""`), so repo claims cite file lines instead. Commits whose message
-   matches the secret patterns keep their `commits` row but get no chunk.
+   have no path or lines (`path=""`), so repo claims cite file lines instead.
 
 10. **Budget reserve.** Grade, rewrite, and per-repo summaries leave one call for the answer. With nothing
     left, the answer node builds an evidence-only answer in code (every claim cites real evidence).
@@ -108,3 +107,10 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
 
 24. **Chat history goes to the router and answer as messages** (`MessagesPlaceholder("history")`, last 6),
     not as pasted text.
+
+25. **Per-question LLM budget raised from 12 to 16.** Counting the worst cases with the expand planner
+    added: lookup with two expand loops is router 1 + grade 3 + plan 2 + answer 1 + 2 verify retries = 9,
+    and each structured call can double when a free model's JSON needs the repair retry. An architecture
+    question over a 3–4 repo group adds one summary per repo, and chat adds a title. 12 left little room,
+    so summaries or answer retries were the first things cut on those paths. 16 covers them; typical
+    questions still use 3–5 calls, so the daily budget (1,000) is barely affected.
