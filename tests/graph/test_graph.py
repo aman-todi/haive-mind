@@ -602,3 +602,27 @@ def test_chat_history_reaches_router_as_messages(cfg, db, store):
     kinds = [m.type for m in second]
     assert kinds[:4] == ["system", "human", "ai", "human"]  # system, history (Q + answer), new question
     assert second[1].content == Q and "choose_method" in second[2].content
+
+
+def test_follow_up_is_rewritten_to_stand_alone(cfg, db, store):
+    standalone = "Where is the discount function in app/valuation/dcf.py and how does it work?"
+    r, fake = make_runner(cfg, db, store, {
+        "RouterOutput": [
+            router(identifiers=["choose_method"], standalone_question=Q),  # first turn: unchanged, ignored
+            router(identifiers=[], standalone_question=standalone),
+        ],
+        "GradeOutput": [grade()], "Answer": [answer(DCF_CLAIM)],
+    })  # fmt: skip
+    first = r.run(Q, thread_id="chat")
+    assert not first.state.get("rewritten_query")
+    res = r.run("and what about the discount one?", thread_id="chat")
+    assert res.state["rewritten_query"] == standalone
+    assert "dcf.py" in res.state["identifiers"]  # extracted from the standalone text, not the follow-up
+    assert f"Follow-up read as: {standalone}" in res.state["notices"]
+    grade_prompts = [m for m, name in zip(fake.seen, fake.calls, strict=True) if name == "GradeOutput"]
+    assert standalone in grade_prompts[-1][0].content  # grading uses the standalone question
+    answer_prompts = [m for m, name in zip(fake.seen, fake.calls, strict=True) if name == "Answer"]
+    assert answer_prompts[-1][-2].content.endswith(
+        "and what about the discount one?"
+    )  # answer sees the original
+    assert any(e.get("symbol") == "discount" or "discount" in e["text"] for e in res.state["evidence"])

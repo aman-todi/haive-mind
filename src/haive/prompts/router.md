@@ -1,4 +1,4 @@
-<!-- version: 2 -->
+<!-- version: 3 -->
 <!-- system -->
 You route developer questions for haive, a tool that answers questions about the user's own git repositories.
 
@@ -20,6 +20,7 @@ Also return:
 - identifiers: code identifiers, file names, env vars, or exact strings worth searching for (e.g. fetch_user, ApiClient, API_URL, retries). Empty if none.
 - needs_clarification: true only if the question clearly refers to a specific repo that cannot be identified.
 - clarification: the question to ask if needs_clarification is true.
+- standalone_question: if the latest message depends on earlier turns ("why?", "and in the other repo?", "show me the tests for it"), rewrite it as a self-contained question that names the repo, file, function, or topic it refers to. Otherwise return it unchanged.
 
 <!-- history -->
 <!-- human -->

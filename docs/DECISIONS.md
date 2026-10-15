@@ -108,9 +108,16 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
 24. **Chat history goes to the router and answer as messages** (`MessagesPlaceholder("history")`, last 6),
     not as pasted text.
 
-25. **Per-question LLM budget raised from 12 to 16.** Counting the worst cases with the expand planner
+25. **Per-question LLM budget raised from 12 to 16, then to 25.** Counting the worst cases with the expand planner
     added: lookup with two expand loops is router 1 + grade 3 + plan 2 + answer 1 + 2 verify retries = 9,
     and each structured call can double when a free model's JSON needs the repair retry. An architecture
     question over a 3–4 repo group adds one summary per repo, and chat adds a title. 12 left little room,
-    so summaries or answer retries were the first things cut on those paths. 16 covers them; typical
-    questions still use 3–5 calls, so the daily budget (1,000) is barely affected.
+    so summaries or answer retries were the first things cut on those paths. 16 covered them; 25 leaves
+    headroom for further development and unforeseen paths. Typical questions still use 3–5 calls, and
+    cost control is each installer's call via config (`max_llm_calls_per_question`, `daily_call_budget`).
+
+26. **Chat follow-ups are rewritten to stand alone.** The router returns `standalone_question` when the
+    latest message depends on earlier turns; it becomes `rewritten_query`, which retrieval, grading,
+    expand, and web search use, and identifiers are pulled from it. The answer model still sees the
+    original message plus history. No extra call: the router runs every turn anyway. A notice shows
+    how the follow-up was read.

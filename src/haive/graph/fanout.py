@@ -115,7 +115,7 @@ def make_load_profiles(deps: Deps):
             if deps.use_vector:
                 evs += vector_evidence(
                     deps,
-                    state.get("rewritten_query") or f"{state['question']} {ARCH_QUERY}",
+                    f"{state.get('rewritten_query') or state['question']} {ARCH_QUERY}",
                     [repo],
                     ["doc", "config", "code"],
                     4,

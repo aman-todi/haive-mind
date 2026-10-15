@@ -23,6 +23,9 @@ class RouterOutput(BaseModel):
     identifiers: list[str] = Field(default_factory=list)
     needs_clarification: bool = False
     clarification: str = ""
+    standalone_question: str = Field(
+        default="", description="the latest message rewritten to stand alone, if it depends on earlier turns"
+    )
 
 
 IDENT_RE = re.compile(
@@ -65,7 +68,6 @@ def make_router(deps: Deps):
 
     def router(state: GraphState, ctx: NodeCtx) -> dict[str, Any]:
         notices: list[str] = []
-        calls = 0
         if not cfg.repos:
             ctx.detail = "no repos registered"
             return {
@@ -95,8 +97,14 @@ def make_router(deps: Deps):
         intent = out.get("intent", "lookup")
         if intent not in INTENTS:
             intent = heuristic_intent(state["question"])
+        # A follow-up that leans on earlier turns ("and the tests for it?") is rewritten by the router so
+        # retrieval, grading, and expand search for the real subject. The answer still sees the original.
+        standalone = (out.get("standalone_question") or "").strip()
+        has_history = len(state.get("messages") or []) > 1
+        if not has_history or standalone.lower() == state["question"].strip().lower():
+            standalone = ""
         idents = [*out.get("identifiers", [])]
-        for t in code_identifiers(state["question"]):
+        for t in code_identifiers(standalone or state["question"]):
             if t not in idents:
                 idents.append(t)
 
@@ -105,8 +113,10 @@ def make_router(deps: Deps):
             "router": out,
             "intent": intent,
             "identifiers": idents[:12],
-            "llm_calls": calls,
+            "rewritten_query": standalone or None,
         }
+        if standalone:
+            notices.append(f"Follow-up read as: {standalone}")
         requested = state.get("requested_scope") or []
         hint = state.get("scope_hint")
         if requested:

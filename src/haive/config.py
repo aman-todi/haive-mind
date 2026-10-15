@@ -58,7 +58,7 @@ class ModelsConfig(BaseModel):
 
 
 class LimitsConfig(BaseModel):
-    max_llm_calls_per_question: int = 16
+    max_llm_calls_per_question: int = 25
     max_grade_loops: int = 2
     max_answer_retries: int = 2
     daily_call_budget: int = 1000
