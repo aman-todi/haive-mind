@@ -81,7 +81,8 @@ They are never written to `config.toml`.
 haive init                                   # config + data dirs, validates keys, creates the index
 haive add ~/code/intrinsic-valuation --name valuation-backend -g valuation
 haive add https://github.com/you/weatherpruf  # URLs are cloned into haive's data dir
-haive index                                  # first run downloads the embedding model
+haive add --scan ~/code                      # or register every repo in a folder at once
+haive index                                  # indexes all registered repos; first run downloads the model
 haive ask "Where does the DCF choose a valuation method?"
 haive debug crash.txt -q "happens on empty portfolios"
 pytest 2>&1 | haive debug -                  # or pipe it in
@@ -92,11 +93,12 @@ haive chat                                   # threads are saved, titled, and re
 
 ```
 haive init                                  create config + data dirs, validate keys, create the vector index
-haive add <path|git-url> [--name N] [--group G]
+haive add <path|git-url>... [--name N] [-g G]   register one or more repos
+haive add --scan <dir>... [-g G]            register every git repo directly inside <dir>
 haive remove <name>                         unregister a repo and delete its vectors and rows
 haive repos                                 path, last indexed, chunk/commit counts, stale?
 haive groups                                groups and their repos (edit groups in config.toml)
-haive index [names...] [--full]             incremental by default; --full rebuilds
+haive index [names...] [--full]             no names = all registered repos; incremental unless --full
 haive sync                                  git pull --ff-only on every repo, then incremental index
 haive status                                vector store, models per role, today's LLM usage, index health
 

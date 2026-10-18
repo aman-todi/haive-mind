@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -23,8 +24,13 @@ TRACES = Path(__file__).parent.parent / "fixtures" / "traces"
 
 def snapshot(root: Path) -> dict:
     """Everything the read-only guarantee covers: git status, and mtimes of every file incl. .git."""
+    # The probe itself must not write: plain `git status` may refresh and rewrite .git/index
+    # (depending on the user's git config, e.g. core.checkstat), which would look like haive did it.
     status = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain", "--ignored"], capture_output=True, text=True
+        ["git", "-C", str(root), "status", "--porcelain", "--ignored"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
     ).stdout
     mtimes = {str(p.relative_to(root)): p.stat().st_mtime_ns for p in root.rglob("*") if p.is_file()}
     return {"status": status, "mtimes": mtimes}
@@ -239,3 +245,25 @@ def test_paid_flag_uses_strong_paid_model(cli, sample_repo):
     cli("ask", "Where does the DCF choose a valuation method?", "--json", "--paid")
     assert "deepseek/deepseek-v4-pro-0813" in cli.built
     assert "strong_paid: deepseek/deepseek-v4-pro-0813  (off" in cli("status").output
+
+
+def test_batch_add_scan_and_multiple_paths(cli, sample_repo, other_repo, tmp_path):
+    cli("init", "--no-check", "--backend", "chroma")
+    (tmp_path / "not-a-repo").mkdir()
+    out = cli("add", "--scan", str(tmp_path), "-g", "everything").output
+    assert "2 added, 0 already registered, 0 failed" in out and "non-repo folders ignored" in out
+    cfg = load_config()
+    assert set(cfg.repos) == {"valuation", "frontend"}
+    assert cfg.groups["everything"] == ["frontend", "valuation"]
+    # re-running is safe: already-registered repos are skipped, not errors
+    out = cli("add", "--scan", str(tmp_path)).output
+    assert "0 added, 2 already registered, 0 failed" in out
+    # several explicit paths; a bad one is reported but doesn't stop the rest
+    cli("remove", "frontend", "--yes")
+    res = cli("add", str(other_repo), str(tmp_path / "not-a-repo"), ok=False)
+    assert res.exit_code == 1 and "1 added, 0 already registered, 1 failed" in res.output
+    assert "frontend" in load_config().repos
+    assert "only works when adding a single repo" in cli("add", str(sample_repo), str(other_repo), "--name", "x",
+                                                         ok=False).output  # fmt: skip
+    cli("index")  # no names: indexes every registered repo
+    assert "fresh" in cli("repos").output

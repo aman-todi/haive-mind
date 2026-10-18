@@ -199,48 +199,142 @@ def _name_from(src: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "-", base) or "repo"
 
 
-@app.command()
-def add(
-    source: Annotated[str, typer.Argument(help="Local path or git URL (URLs are cloned into the data dir).")],
-    name: Annotated[str | None, typer.Option("--name", help="Repo name (default: directory name).")] = None,
-    group: Annotated[
-        list[str] | None, typer.Option("--group", "-g", help="Add to a group (repeatable).")
-    ] = None,
-) -> None:
-    """Register a repo."""
+class AddError(Exception):
+    pass
+
+
+class AddSkip(Exception):
+    pass
+
+
+def _register(rt: Any, source: str, name: str | None, groups: list[str]) -> str:
+    """Register one repo in ``rt.cfg`` (not saved). Returns its name.
+
+    Raises AddSkip when the repo is already registered at the same path, AddError otherwise."""
     from haive.tools import git
 
-    rt = runtime()
     cfg = rt.cfg
     name = name or _name_from(source)
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
-        fail("repo names may only contain letters, digits, '.', '_' and '-'")
+        raise AddError(f"{name!r}: repo names may only contain letters, digits, '.', '_' and '-'")
+    if not _is_url(source):
+        root = Path(source).expanduser().resolve()
+        if any(rc.root == root for rc in cfg.repos.values()):
+            raise AddSkip(f"{root} is already registered")
     if name in cfg.repos:
-        fail(f"a repo named {name!r} is already registered")
+        raise AddError(f"a repo named {name!r} is already registered (use --name to pick another)")
     if name in cfg.groups:
-        fail(f"{name!r} is already a group name")
-    remote = None
+        raise AddError(f"{name!r} is already a group name")
     if _is_url(source):
         console.print(f"Cloning {source} …")
         try:
             root = git.clone(source, name)
         except git.GitError as e:
-            fail(f"clone failed: {e}")
+            raise AddError(f"clone failed: {e}") from e
         remote = source
     else:
-        root = Path(source).expanduser().resolve()
         if not git.is_repo(root):
-            fail(f"{root} is not a git repository")
+            raise AddError(f"{root} is not a git repository")
         remote = git.remote_url(root)
     cfg.repos[name] = RepoConfig(path=str(root), remote_url=remote)
-    for g in group or []:
+    for g in groups:
         members = cfg.groups.setdefault(g, [])
         if name not in members:
             members.append(name)
-    save_config(cfg)
     rt.db.upsert_repo(name, str(root), remote)
-    console.print(f"[green]✓[/] added {name} → {root}" + (f" (groups: {', '.join(group)})" if group else ""))
-    console.print(f"Run [bold]haive index {name}[/] to index it.")
+    return name
+
+
+def _scan(directory: str) -> tuple[list[str], int]:
+    """Git repos directly inside ``directory`` (sorted), and how many other folders were passed over."""
+    from haive.tools import git
+
+    base = Path(directory).expanduser().resolve()
+    if not base.is_dir():
+        fail(f"{base} is not a directory")
+    repos, others = [], 0
+    for child in sorted(base.iterdir()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if (child / ".git").exists() and git.is_repo(child):
+            repos.append(str(child))
+        else:
+            others += 1
+    return repos, others
+
+
+@app.command()
+def add(
+    sources: Annotated[
+        list[str],
+        typer.Argument(
+            help="Local paths or git URLs (URLs are cloned into the data dir). With --scan: directories."
+        ),
+    ],
+    name: Annotated[
+        str | None, typer.Option("--name", help="Repo name (default: directory name). Single repo only.")
+    ] = None,
+    group: Annotated[
+        list[str] | None, typer.Option("--group", "-g", help="Add to a group (repeatable).")
+    ] = None,
+    scan: Annotated[
+        bool, typer.Option("--scan", help="Register every git repo directly inside the given directories.")
+    ] = False,
+) -> None:
+    """Register one or more repos (indexing is separate: `haive index`)."""
+    rt = runtime()
+    groups = group or []
+    targets: list[str] = []
+    passed_over = 0
+    if scan:
+        for d in sources:
+            found, others = _scan(d)
+            targets += found
+            passed_over += others
+        if not targets:
+            fail(f"no git repositories found directly inside {', '.join(sources)}")
+    else:
+        targets = list(sources)
+    if name and len(targets) > 1:
+        fail("--name only works when adding a single repo")
+
+    if len(targets) == 1 and not scan:  # single repo: any problem is an error
+        try:
+            added = _register(rt, targets[0], name, groups)
+        except (AddError, AddSkip) as e:
+            fail(str(e))
+        save_config(rt.cfg)
+        root = rt.cfg.repos[added].path
+        console.print(
+            f"[green]✓[/] added {added} → {root}" + (f" (groups: {', '.join(groups)})" if groups else "")
+        )
+        console.print(f"Run [bold]haive index {added}[/] to index it.")
+        return
+
+    added_names: list[str] = []
+    skipped = errors = 0
+    for src in targets:
+        try:
+            added_names.append(_register(rt, src, None, groups))
+            console.print(f"[green]✓[/] {added_names[-1]} → {rt.cfg.repos[added_names[-1]].path}")
+        except AddSkip as e:
+            skipped += 1
+            console.print(f"[dim]- skipped: {escape(str(e))}[/]")
+        except AddError as e:
+            errors += 1
+            err.print(f"[yellow]![/] {escape(src)}: {escape(str(e))}")
+    if added_names:
+        save_config(rt.cfg)
+    summary = f"{len(added_names)} added, {skipped} already registered, {errors} failed"
+    if scan and passed_over:
+        summary += f", {passed_over} non-repo folders ignored"
+    if groups and added_names:
+        summary += f" (groups: {', '.join(groups)})"
+    console.print(summary)
+    if added_names:
+        console.print("Run [bold]haive index[/] to index everything registered.")
+    if errors:
+        raise typer.Exit(1)
 
 
 @app.command()
