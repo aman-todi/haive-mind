@@ -177,8 +177,9 @@ mode = "ask"                  # off | ask | auto
 provider = "auto"             # tavily if TAVILY_API_KEY is set, else duckduckgo
 ```
 
-Data lives in `~/.local/share/haive/`: `haive.db` (the index, not a copy of your code), `checkpoints.db`
-(chat state), `clones/`, and `chroma/`.
+Data lives in `~/.local/share/haive/` on Linux and `~/Library/Application Support/haive/` on macOS:
+`haive.db` (the index, not a copy of your code), `checkpoints.db` (chat state), `models/` (the embedding
+model, about 600 MB, downloaded once), `clones/`, and `chroma/`.
 
 ## Models
 
