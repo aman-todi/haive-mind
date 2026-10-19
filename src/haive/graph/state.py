@@ -68,6 +68,8 @@ class GraphState(TypedDict, total=False):
     scope_hint: str | None
     clarified: bool
     clarify_question: str | None
+    clarify_kind: str | None  # "scope" | "question"
+    clarify_options: list[str]
     rewritten_query: str | None
     rewrites: int
     parsed_trace: dict[str, Any] | None
@@ -111,6 +113,8 @@ def turn_input(
         "scope_hint": None,
         "clarified": False,
         "clarify_question": None,
+        "clarify_kind": None,
+        "clarify_options": [],
         "rewritten_query": None,
         "rewrites": 0,
         "parsed_trace": None,
@@ -179,6 +183,7 @@ class NodeCtx:
     meter: Meter
     events: list[dict[str, Any]] = field(default_factory=list)
     detail: str = ""
+    notices: list[str] = field(default_factory=list)  # shown to the user under the answer
 
     def tool(self, name: str, detail: str, ms: float) -> None:
         self.events.append({"type": "tool", "name": name, "detail": detail[:160], "ms": round(ms)})
@@ -206,6 +211,8 @@ def node(name: str, deps: Deps) -> Callable:
                 out = dict(out)
                 out["node_log"] = [entry, *ctx.meter.log, *ctx.events, *out.get("node_log", [])]
                 out["llm_calls"] = ctx.meter.calls + int(out.get("llm_calls", 0) or 0)
+                if ctx.notices:
+                    out["notices"] = [*(out.get("notices") or []), *ctx.notices]
             return out
 
         return run

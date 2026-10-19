@@ -22,7 +22,10 @@ class RouterOutput(BaseModel):
     compare_targets: list[str] = Field(default_factory=list)
     identifiers: list[str] = Field(default_factory=list)
     needs_clarification: bool = False
+    clarify_about: str = Field(default="scope", description="scope | question")
     clarification: str = ""
+    clarify_options: list[str] = Field(default_factory=list)
+    assumption: str = ""
     standalone_question: str = Field(
         default="", description="the latest message rewritten to stand alone, if it depends on earlier turns"
     )
@@ -119,6 +122,9 @@ def make_router(deps: Deps):
             notices.append(f"Follow-up read as: {standalone}")
         requested = state.get("requested_scope") or []
         hint = state.get("scope_hint")
+        clarified = state.get("clarified")
+        vague = bool(out.get("needs_clarification"))
+        about = "question" if out.get("clarify_about") == "question" else "scope"
         if requested:
             scope, unknown = cfg.resolve_names(requested)
             if unknown:
@@ -130,18 +136,29 @@ def make_router(deps: Deps):
                 notices.append("Scope defaulted to all repos.")
         else:
             scope, unknown = cfg.resolve_names(out.get("repos", []))
-            if (unknown or out.get("needs_clarification")) and not state.get("clarified"):
-                q = out.get("clarification") or (
+            if (unknown or (vague and about == "scope")) and not clarified:
+                q = (out.get("clarification") if about == "scope" else "") or (
                     f"I don't know {', '.join(repr(u) for u in unknown)}. Which repos or groups did you mean?"
                     if unknown
                     else "Which repos or groups should I look at?"
                 )
-                ctx.detail = f"clarify: unknown={unknown}"
-                return {**update, "clarify_question": q, "notices": notices}
+                ctx.detail = f"clarify scope: unknown={unknown}"
+                return {**update, "clarify_question": q, "clarify_kind": "scope", "notices": notices}
             if not scope:
                 scope = list(cfg.repos)
         update["scope_repos"] = scope
         update["clarify_question"] = None
+        if vague and about == "question" and out.get("clarification") and not clarified:
+            ctx.detail = "clarify question"
+            return {
+                **update,
+                "clarify_question": out["clarification"],
+                "clarify_kind": "question",
+                "clarify_options": [str(o) for o in out.get("clarify_options") or []][:4],
+                "notices": notices,
+            }
+        if out.get("assumption") and not clarified:
+            notices.append(f"Assumed: {out['assumption']}")
 
         if intent == "compare":
             targets = []
@@ -166,10 +183,31 @@ def make_router(deps: Deps):
 
 def make_clarify(deps: Deps):
     def clarify(state: GraphState, ctx: NodeCtx) -> dict[str, Any]:
-        options = list(deps.cfg.repos) + list(deps.cfg.groups)
-        answer = interrupt({"kind": "clarify", "question": state.get("clarify_question"), "options": options})
+        q = state.get("clarify_question")
+        if state.get("clarify_kind") != "question":
+            options = list(deps.cfg.repos) + list(deps.cfg.groups)
+            answer = interrupt({"kind": "clarify", "about": "scope", "question": q, "options": options})
+            ctx.detail = f"scope={answer!r}"
+            return {"scope_hint": str(answer or "all"), "clarified": True}
+        answer = interrupt(
+            {
+                "kind": "clarify",
+                "about": "question",
+                "question": q,
+                "options": state.get("clarify_options") or [],
+            }
+        )
+        answer = str(answer or "").strip()
         ctx.detail = f"answer={answer!r}"
-        return {"scope_hint": str(answer or "all"), "clarified": True}
+        if not answer:  # no answer: go ahead with the question as asked
+            return {"clarified": True}
+        # Fold the answer into the question and route again: intent and identifiers may change.
+        return {
+            "question": f"{state['question']} ({answer})",
+            "router": None,
+            "clarified": True,
+            "notices": [f"Clarified: {q} → {answer}"],
+        }
 
     return clarify
 

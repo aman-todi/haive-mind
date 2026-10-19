@@ -268,3 +268,17 @@ def test_batch_add_scan_and_multiple_paths(cli, sample_repo, other_repo, tmp_pat
                                                          ok=False).output  # fmt: skip
     cli("index")  # no names: indexes every registered repo
     assert "fresh" in cli("repos").output
+
+
+def test_clarify_prompt_accepts_number_or_text(monkeypatch):
+    from haive import cli as cli_mod
+
+    payload = {
+        "kind": "clarify",
+        "about": "question",
+        "question": "Which?",
+        "options": ["indexing", "answers"],
+    }
+    for typed, expected in [("2", "answers"), ("the CLI", "the CLI"), ("", ""), ("9", "9")]:
+        monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *a, typed=typed, **kw: typed)
+        assert cli_mod._on_interrupt(payload) == expected

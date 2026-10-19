@@ -34,7 +34,7 @@ Walkthrough
 |---|---|
 | lookup | "Where does the DCF choose a valuation method?" / "How does X work?" |
 | recall | "How did I implement OAuth before?" (across all your repos) |
-| history | "When and why did I add retries to the API client?" (commits, `git log -S/-L`) |
+| history | "When and why did I add retries to the API client?" / "What changed in weatherpruf in the last month?" (commits, `git log -S/-L`; time windows like "last 2 weeks", "since August", "last 20 commits", defaulting to 2 weeks) |
 | debug | `haive debug trace.txt`: ranked hypotheses, evidence, a suggested diff (never applied), how to verify |
 | compare | "How do weatherpruf and the valuation app differ on deploy?" |
 | architecture | "Break down the valuation project" (a repo or a group: components, connections, data flow, deploy) |
@@ -43,6 +43,11 @@ Walkthrough
 Debug understands Python (including chained exceptions), Node/V8, Java/Kotlin, Go panics, Rust panics and
 backtraces, .NET, C/C++ sanitizer and gdb output, and compiler/linter lines (gcc/clang, tsc, rustc,
 MSBuild, mypy/ruff/eslint style). Anything else falls back to a generic `path:line` scan.
+
+Vague questions: when a reasonable reading exists, haive picks it and says so ("Assumed: …",
+"History window: the last 2 weeks"). Only when the answers would differ completely ("is it slow?") does
+it ask, with a few options; pick one by number or type your own. Non-interactive runs answer as asked
+and note what they would have asked.
 
 ## Install
 
@@ -160,9 +165,10 @@ fast = "nvidia/nemotron-3-super-120b-a12b:free"    # router, grader, rewrite, ex
 strong = "nvidia/nemotron-3-ultra-550b-a55b:free"  # answer, diagnose, synthesis
 strong_paid = "deepseek/deepseek-v4-pro-0813"      # used with --paid or use_paid_strong = true
 use_paid_strong = false
-fallback = ["openrouter/free"]
+fallback = ["nvidia/nemotron-3-super-120b-a12b:free", "openrouter/free"]
 requests_per_minute = 20      # client-side throttle
 max_retries = 2               # per model (honors Retry-After) before falling back
+timeout_seconds = 90          # per request
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]

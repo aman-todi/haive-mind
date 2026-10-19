@@ -178,8 +178,18 @@ class RunResult:
 
 
 def default_interrupt(payload: dict[str, Any]) -> Any:
-    """Non-interactive defaults: scope = all, web declined."""
-    return "all" if payload.get("kind") == "clarify" else False
+    """Non-interactive defaults: scope = all, a vague question answered as asked, web declined."""
+    if payload.get("kind") == "clarify":
+        return "" if payload.get("about") == "question" else "all"
+    return False
+
+
+def _defaulted(payload: dict[str, Any]) -> str:
+    if payload.get("kind") != "clarify":
+        return "web search declined (non-interactive)"
+    if payload.get("about") == "question":
+        return f"answered as asked; would have asked: {payload.get('question')}"
+    return "scope defaulted to all repos"
 
 
 class Runner:
@@ -219,11 +229,7 @@ class Runner:
                 value = on_interrupt(payload)
             else:
                 value = default_interrupt(payload)
-                defaulted.append(
-                    "scope defaulted to all repos"
-                    if payload.get("kind") == "clarify"
-                    else "web search declined (non-interactive)"
-                )
+                defaulted.append(_defaulted(payload))
             result = self.app.invoke(Command(resume=value), config)
         state = dict(self.app.get_state(config).values)
         if defaulted:

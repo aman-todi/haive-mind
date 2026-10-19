@@ -260,6 +260,62 @@ def test_clarify_interrupt(cfg, db, store, other_repo):
     assert nodes(res)[:4] == ["freshness", "router", "clarify", "router"]
 
 
+VAGUE = router(
+    needs_clarification=True,
+    clarify_about="question",
+    clarification="Which operation feels slow?",
+    clarify_options=["indexing", "answering questions"],
+)
+
+
+def test_vague_question_asks_then_reroutes(cfg, db, store):
+    r, fake = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [VAGUE, router("lookup", identifiers=["choose_method"])],
+            "GradeOutput": [grade()],
+            "Answer": [answer(DCF_CLAIM)],
+        },
+    )
+    asked = []
+    res = r.run("is it slow?", thread_id="t", on_interrupt=lambda p: asked.append(p) or "answering questions")
+    assert asked[0]["about"] == "question" and asked[0]["options"] == ["indexing", "answering questions"]
+    assert nodes(res)[:4] == ["freshness", "router", "clarify", "router"]
+    assert fake.calls.count("RouterOutput") == 2  # routed again with the answer folded in
+    assert res.state["question"] == "is it slow? (answering questions)"
+    assert any(n.startswith("Clarified: Which operation") for n in res.state["notices"])
+
+
+def test_vague_question_non_interactive_answers_as_asked(cfg, db, store):
+    r, fake = make_runner(
+        cfg,
+        db,
+        store,
+        {"RouterOutput": [VAGUE], "GradeOutput": [grade()], "Answer": [answer(DCF_CLAIM)]},
+    )
+    res = r.run("is it slow?", thread_id="t", interactive=False)
+    assert fake.calls.count("RouterOutput") == 1 and res.state["question"] == "is it slow?"
+    assert any("would have asked: Which operation feels slow?" in n for n in res.state["notices"])
+    assert res.answer is not None
+
+
+def test_router_assumption_is_shown(cfg, db, store):
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router(assumption="'the method' read as choose_method")],
+            "GradeOutput": [grade()],
+            "Answer": [answer(DCF_CLAIM)],
+        },
+    )
+    res = r.run("how is the method picked?", thread_id="t")
+    assert "Assumed: 'the method' read as choose_method" in res.state["notices"]
+
+
 def test_requested_scope_wins(cfg, db, store, other_repo):
     cfg.repos["frontend"] = RepoConfig(path=str(other_repo))
     r, _ = make_runner(
@@ -375,7 +431,8 @@ def test_recent_changes_cite_commits(cfg, db, store):
     )
     res = r.run("what changed recently?", thread_id="t")
     whys = [e["why"] for e in res.state["evidence"]]
-    assert "recent commit" in whys[0] and not any("git log -S" in w for w in whys)
+    assert whys[0] == "history window" and not any("git log -S" in w for w in whys)
+    assert any(n.startswith("History window: the newest") for n in res.state["notices"])
     assert f"sha={head[:12]}" in str(fake.messages[-1])  # commit shas are in the evidence headers
     good_claim, bad_claim = res.answer.sections[0].claims
     assert not good_claim.unverified and bad_claim.unverified

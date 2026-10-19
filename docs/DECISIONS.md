@@ -134,3 +134,22 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     third try, and each try on a free strong model costs 30–60 s. The request timeout dropped from 120 s
     to 90 s (`models.timeout_seconds`), and `--trace` shows the OpenAI client's own failed attempts
     (timeouts, 429s) inside a call, which were previously invisible.
+
+29. **Vague questions: assume and say so; ask only when no reading stands out.** The router (already
+    one fast call per question) returns either an `assumption`, shown as a notice, or a clarifying
+    question with 2-4 options when completely different answers fit. It is told never to ask about
+    time ranges, missing scope, or detail level, since those have defaults; asking too often costs
+    more than an occasional wrong guess the notice makes visible. The answer is folded into the
+    question and the router runs again (intent and identifiers may change). Non-interactive runs
+    answer as asked and say what they would have asked. No separate grader node: it would add a call
+    to every question to catch a rare case.
+
+30. **History time windows are parsed in code.** "last 2 weeks", "past three months", "since August",
+    "since 2026-09-01", "last 20 commits" become `git log --since` / `-n`, applied to every git search
+    in the question. With no window and no identifiers, the default is the last two weeks, falling
+    back to the newest 12 commits when fewer than 3 landed in that window; a notice states the window
+    used. Regexes rather than the model: the phrasings are few, and dates must be exact.
+
+31. **The strong role falls back to the fast model first.** `fallback` defaults to
+    `[nemotron-3-super, openrouter/free]`; a role skips its own model, so a stalled or rate-limited
+    Ultra drops to Super (same family, faster) before the generic free router.

@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Any
 
 from haive.graph.state import Deps, GraphState, NodeCtx, ev_from_hit, ev_from_snippet
+from haive.graph.timewindow import DEFAULT_MIN_COMMITS, default_window, parse_window
 from haive.index.commits import utc_iso
 from haive.tools import files, git, ripgrep
 from haive.types import Evidence
@@ -152,6 +153,7 @@ def recall(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> lis
 
 
 RECENT_COMMITS = 12
+MAX_WINDOW_COMMITS = 30  # cap on commits listed for one window (and history evidence overall)
 
 
 def _commit_ev(repo: str, c: dict[str, Any], why: str) -> dict[str, Any]:
@@ -167,37 +169,66 @@ def _commit_ev(repo: str, c: dict[str, Any], why: str) -> dict[str, Any]:
     ).model_dump()
 
 
+def _newest(
+    deps: Deps, ctx: NodeCtx, roots: dict[str, Any], n: int, since: str | None
+) -> list[tuple[str, dict]]:
+    """The newest ``n`` commits across ``roots`` (optionally since a date), newest first."""
+    found = [
+        (utc_iso(c["date"]), repo, c)
+        for repo, root in roots.items()
+        for c in ctx.timed(
+            "git log",
+            f"{repo} -n{n}" + (f" --since={since}" if since else ""),
+            lambda r=root: git.log(r, n=n, numstat=True, since=since),
+        )
+    ]
+    return [(repo, c) for _, repo, c in sorted(found, key=lambda x: x[0], reverse=True)[:n]]
+
+
 def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> list[dict[str, Any]]:
     q = query_of(state)
     idents = state.get("identifiers") or []
     roots = deps.roots(scope)
+    window = parse_window(q)
+    since = window.git_since if window else None
     evs: list[dict[str, Any]] = []
-    if deps.use_ripgrep and not idents:
-        # "what changed recently?": no code names to search for, so the newest commits in scope answer it
-        recent = [
-            (utc_iso(c["date"]), repo, c)
-            for repo, root in roots.items()
-            for c in ctx.timed(
-                "git log",
-                f"{repo} -n{RECENT_COMMITS}",
-                lambda r=root: git.log(r, n=RECENT_COMMITS, numstat=True),
+    if deps.use_ripgrep and (window or not idents):
+        # "what changed (recently | in the last 2 weeks | in the last 20 commits)?": list the window itself
+        if window and window.commits:
+            newest = _newest(deps, ctx, roots, min(window.commits, MAX_WINDOW_COMMITS), None)
+        else:
+            w = window or default_window()
+            newest = _newest(deps, ctx, roots, MAX_WINDOW_COMMITS, w.git_since)
+            if not window and len(newest) < DEFAULT_MIN_COMMITS:
+                newest = _newest(deps, ctx, roots, RECENT_COMMITS, None)
+                w.label = f"the newest {len(newest)} commits (fewer than {DEFAULT_MIN_COMMITS} in {w.label})"
+            window = w
+        evs += [_commit_ev(repo, c, "history window") for repo, c in newest]
+        ctx.notices.append(
+            f"History window: {window.label} ({len(newest)} commits)."
+            + (
+                " Ask e.g. 'in the last 2 months' or 'last 20 commits' to change it."
+                if not parse_window(q)
+                else ""
             )
-        ]
-        for _, repo, c in sorted(recent, key=lambda x: x[0], reverse=True)[:RECENT_COMMITS]:
-            evs.append(_commit_ev(repo, c, "recent commit"))
-    if deps.use_vector:
+        )
+    if deps.use_vector and not (window and evs):
         evs += vector_evidence(deps, q, scope, ["commit"], 8, ctx, "commit search")
     if deps.use_ripgrep:
-        terms = idents or keywords(q)[:3]
+        terms = idents or ([] if window else keywords(q)[:3])
         for repo, root in roots.items():
             for t in terms[:4]:
                 if idents:  # pickaxe on plain words ("changed") matches unrelated code
                     for c in ctx.timed(
-                        "git log -S", t, lambda r=root, t=t: git.log(r, n=6, pickaxe=t, numstat=True)
+                        "git log -S",
+                        t,
+                        lambda r=root, t=t: git.log(r, n=6, pickaxe=t, numstat=True, since=since),
                     ):
                         evs.append(_commit_ev(repo, c, f"git log -S{t}"))
                 for c in ctx.timed(
-                    "git log --grep", t, lambda r=root, t=t: git.log(r, n=4, grep=t, numstat=True)
+                    "git log --grep",
+                    t,
+                    lambda r=root, t=t: git.log(r, n=4, grep=t, numstat=True, since=since),
                 ):
                     evs.append(_commit_ev(repo, c, f"git log --grep={t}"))
         # git log -L on the functions those identifiers name, plus the current code itself
@@ -206,7 +237,9 @@ def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> li
             root = roots.get(ev["repo"])
             rng = (f"{ev['start_line']},{ev['end_line']}", ev["path"])
             for c in ctx.timed(
-                "git log -L", f"{rng[1]}:{rng[0]}", lambda r=root, rng=rng: git.log(r, n=5, line_range=rng)
+                "git log -L",
+                f"{rng[1]}:{rng[0]}",
+                lambda r=root, rng=rng: git.log(r, n=5, line_range=rng, since=since),
             ):
                 evs.append(_commit_ev(ev["repo"], c, f"git log -L {rng[1]}:{rng[0]}"))
     # the same commit often comes back from several searches: keep one item, merge the reasons
@@ -217,7 +250,7 @@ def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> li
                 merged[e["id"]]["why"] += f"; {e['why']}"
         else:
             merged[e["id"]] = e
-    return list(merged.values())[:20]
+    return list(merged.values())[:MAX_WINDOW_COMMITS]
 
 
 RETRIEVERS = {"lookup": lookup, "recall": recall, "history": history}

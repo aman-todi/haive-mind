@@ -180,6 +180,7 @@ def log(
     line_range: tuple[str, str] | None = None,
     rev: str | None = None,
     numstat: bool = False,
+    since: str | None = None,
 ) -> list[dict]:
     """``git log`` returning dicts: sha, date, author, subject, body, files, insertions, deletions."""
     args = ["log", f"--format={LOG_FORMAT}", "--no-color"]
@@ -187,6 +188,8 @@ def log(
         args.append(f"-n{n}")
     if numstat:
         args.append("--numstat")
+    if since:
+        args.append(f"--since={since}")
     if pickaxe:
         args.append(f"-S{pickaxe}")
     if grep:

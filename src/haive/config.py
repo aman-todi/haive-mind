@@ -49,7 +49,11 @@ class ModelsConfig(BaseModel):
     strong: str = "nvidia/nemotron-3-ultra-550b-a55b:free"  # alt: poolside/laguna-s-2.1:free
     strong_paid: str = "deepseek/deepseek-v4-pro-0813"  # used when use_paid_strong (or --paid)
     use_paid_strong: bool = False
-    fallback: list[str] = Field(default_factory=lambda: ["openrouter/free"])
+    # Tried in order after a role's own model fails; a role skips its own model, so strong falls back to
+    # the fast model first and fast goes straight to openrouter/free.
+    fallback: list[str] = Field(
+        default_factory=lambda: ["nvidia/nemotron-3-super-120b-a12b:free", "openrouter/free"]
+    )
     base_url: str = "https://openrouter.ai/api/v1"
     provider: str = "openai"  # langchain model_provider; any OpenAI-compatible endpoint works
     api_key_env: str = "OPENROUTER_API_KEY"

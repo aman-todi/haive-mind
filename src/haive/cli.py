@@ -618,6 +618,16 @@ def _budget_gate(rt: Any, force: bool) -> None:
 
 
 def _on_interrupt(payload: dict[str, Any]) -> Any:
+    if payload.get("kind") == "clarify" and payload.get("about") == "question":
+        options = payload.get("options") or []
+        err.print(f"[bold]?[/] {escape(payload.get('question') or 'What did you mean?')}")
+        for i, o in enumerate(options, 1):
+            err.print(f"  [cyan]{i}[/] {escape(o)}")
+        hint = (
+            "pick a number or type your own answer; Enter to answer as asked" if options else "Enter to skip"
+        )
+        reply = Prompt.ask(f"[dim]{hint}[/]", default="", show_default=False, console=err).strip()
+        return options[int(reply) - 1] if reply.isdigit() and 0 < int(reply) <= len(options) else reply
     if payload.get("kind") == "clarify":
         q = payload.get("question") or "Which repos or groups?"
         err.print(f"[bold]?[/] {escape(q)}  [dim]options: {', '.join(payload.get('options', []))}, all[/]")
