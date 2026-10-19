@@ -10,12 +10,20 @@ import logging
 import math
 import os
 import re
+import warnings
 from collections.abc import Iterator
+from pathlib import Path
 
 from langchain_core.embeddings import Embeddings
 
 from haive import paths
 from haive.types import Embedder
+
+# haive draws its own download progress (cli._load_embedding_model). The Hub's bars are switched off
+# with its env var because fastembed re-enables them programmatically around each download; this
+# must run before huggingface_hub is first imported. A user's own setting still wins.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+warnings.filterwarnings("ignore", message="Cannot enable progress bars")
 
 # Chunks are capped at ~1,500 tokens; cap embedding input too, so attention memory stays bounded.
 MAX_EMBED_CHARS = 6000
@@ -25,6 +33,19 @@ def model_cache_dir() -> str:
     """Where the embedding model is downloaded: haive's data dir (fastembed's default is the system temp
     dir, which macOS clears periodically). ``FASTEMBED_CACHE_PATH`` still wins if set."""
     return os.environ.get("FASTEMBED_CACHE_PATH") or str(paths.data_dir() / "models")
+
+
+def cache_bytes() -> int:
+    """Bytes in the model cache. Xet-backed downloads put the large files in a ``blobs/`` dir shared
+    across models at the cache root, so measure the whole cache, not the model's folder."""
+    total = 0
+    for root, _, files in os.walk(model_cache_dir()):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(root, f)).st_size
+            except OSError:
+                pass
+    return total
 
 
 class _HideAnonymousHubNotice(logging.Filter):
@@ -56,6 +77,22 @@ class FastEmbedder(Embeddings):
 
             self._model = TextEmbedding(model_name=self.model_name, cache_dir=model_cache_dir())
         return self._model
+
+    def is_downloaded(self) -> bool:
+        name = self.model_name.split("/")[-1].lower()
+        return any(
+            p.name.lower().endswith(f"--{name}") and any(p.glob("snapshots/*"))
+            for p in Path(model_cache_dir()).glob("models--*")
+        )
+
+    def download_size(self) -> int | None:
+        """Expected bytes on disk, from fastembed's model list."""
+        from fastembed import TextEmbedding
+
+        for m in TextEmbedding.list_supported_models():
+            if m["model"].lower() == self.model_name.lower() and m.get("size_in_GB"):
+                return int(m["size_in_GB"] * 1e9)
+        return None
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         texts = [t[:MAX_EMBED_CHARS] for t in texts]

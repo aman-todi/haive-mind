@@ -18,6 +18,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.progress import (
     BarColumn,
+    DownloadColumn,
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
@@ -447,10 +448,60 @@ class IndexProgress:
             self.progress.update(self.task, completed=self.progress.tasks[-1].total)
 
 
+def _load_embedding_model(rt: Any) -> None:
+    """Load the embedding model before the index progress display starts. On first use that is a
+    download of several hundred MB, shown as one bar fed by the model folder's size on disk."""
+    import threading
+
+    from haive.index.embed import FastEmbedder, cache_bytes
+
+    emb = rt.embedder
+    if not isinstance(emb, FastEmbedder):
+        return
+    if emb.is_downloaded():
+        emb.model  # noqa: B018
+        return
+    total = emb.download_size()
+    console.print(f"Downloading the embedding model [bold]{emb.model_name}[/] (one time)")
+    failure: list[BaseException] = []
+
+    def load() -> None:
+        try:
+            emb.model  # noqa: B018
+        except BaseException as e:  # re-raised on the main thread
+            failure.append(e)
+
+    worker = threading.Thread(target=load, daemon=True)
+    t0, start = time.monotonic(), cache_bytes()
+    with Progress(
+        SpinnerColumn(),
+        BarColumn(),
+        DownloadColumn(),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+    ) as bar:
+        task = bar.add_task("model", total=total)
+        worker.start()
+        while worker.is_alive():
+            bar.update(task, completed=cache_bytes() - start)
+            worker.join(0.5)
+    if failure:
+        raise failure[0]
+    size = (cache_bytes() - start) / 1e6
+    console.print(f"[green]✓[/] embedding model ready ({size:.0f} MB in {_duration(time.monotonic() - t0)})")
+
+
+def _duration(seconds: float) -> str:
+    m, s = divmod(round(seconds), 60)
+    return f"{m}m {s}s" if m else f"{s}s"
+
+
 def _index(rt: Any, names: list[str], full: bool) -> None:
     from haive.index.pipeline import Indexer
     from haive.tools.git import GitError
 
+    _load_embedding_model(rt)
     prog = IndexProgress()
     idx = Indexer(rt.cfg, rt.db, rt.store, progress=prog)
     with prog.progress:

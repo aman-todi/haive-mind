@@ -60,6 +60,7 @@ ignore = ["B008"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = ["ignore:Cannot enable progress bars:UserWarning"]  # haive turns the Hub's bars off on purpose
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 125  # formatter wraps at 110; hand-aligned tables (fmt: skip) may run a bit longer
