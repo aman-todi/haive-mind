@@ -452,6 +452,44 @@ def test_recent_changes_cite_commits(cfg, db, store):
     assert "commit was not among the retrieved evidence" in " ".join(res.state["verify_errors"])
 
 
+def test_empty_answer_is_retried(cfg, db, store):
+    r, fake = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router(identifiers=["choose_method"])],
+            "GradeOutput": [grade()],
+            "Answer": [{"summary": "only a summary", "sections": []}, answer(DCF_CLAIM)],
+        },
+    )
+    res = r.run(Q, thread_id="t")
+    assert nodes(res).count("answer") == 2
+    assert "the answer has no claims" in str(fake.messages[-1])
+    assert not any(c.unverified for c in res.answer.all_claims()) and len(res.answer.all_claims()) == 1
+
+
+def test_still_empty_answer_shows_the_evidence(cfg, db, store):
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router("history")],
+            "GradeOutput": [grade()],
+            "Answer": [{"summary": "Lots changed.", "sections": []}],
+        },
+    )
+    res = r.run("what changed recently?", thread_id="t")
+    assert nodes(res).count("answer") == 2  # one retry, then no progress
+    assert res.answer.summary == "Lots changed."
+    claims = res.answer.all_claims()
+    assert claims and all(c.refs and c.refs[0].sha for c in claims)  # the window's commits, cited
+    notices = res.state["notices"]
+    assert "The model's answer listed no claims; showing the evidence it was given." in notices
+    assert not any("could not be verified" in n for n in notices)
+
+
 def test_recall_groups_by_repo(cfg, db, store, other_repo):
     cfg.repos["frontend"] = RepoConfig(path=str(other_repo))
     r, _ = make_runner(

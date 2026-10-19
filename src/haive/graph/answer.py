@@ -19,7 +19,7 @@ def render_web(results: list[dict[str, Any]]) -> str:
     return "\n".join(f"- {r['url']}\n  {r.get('title', '')}: {r.get('snippet', '')[:500]}" for r in results)
 
 
-def fallback_answer(state: GraphState, reason: str) -> Answer:
+def fallback_answer(state: GraphState, reason: str, max_claims: int = 6) -> Answer:
     """Deterministic answer from the evidence when the model can't (or may not) be called."""
     claims = []
     for e in state.get("evidence") or []:
@@ -45,7 +45,7 @@ def fallback_answer(state: GraphState, reason: str) -> Answer:
                     ],
                 )
             )
-        if len(claims) >= 6:
+        if len(claims) >= max_claims:
             break
     summary = f"No model answer ({reason})."
     summary += (

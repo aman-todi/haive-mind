@@ -162,3 +162,8 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
 
 33. **Response time is shown above every answer**, with or without `--trace`. It excludes time spent at
     clarify and web prompts (the user's time, not haive's), so it reads the same in chat and one-shot.
+
+34. **An answer with no claims fails verification when there was evidence.** A paid DeepSeek run
+    returned a summary and empty sections; with nothing to check, it passed. Now it is retried once
+    with an explicit instruction, and if it is still empty, finalize keeps the model's summary and lists
+    the retrieved evidence (up to 12 items, commits cited by sha) under it, with a notice saying so.

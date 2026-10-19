@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage
 from haive import threads
 from haive.graph.answer import fallback_answer
 from haive.graph.state import Deps, GraphState, NodeCtx
-from haive.graph.verify import claim_keys
+from haive.graph.verify import EMPTY_ANSWER, claim_keys
 from haive.render import fmt_ref
 from haive.types import Answer
 
@@ -32,12 +32,18 @@ def make_finalize(deps: Deps):
             else fallback_answer(state, "no answer")
         )
         bad = state.get("bad_claims") or {}
+        notices: list[str] = []
+        if EMPTY_ANSWER in bad:
+            # The model summarized but cited nothing, even after a retry: show what it was given instead.
+            a.sections = fallback_answer(state, "", max_claims=12).sections
+            notices.append("The model's answer listed no claims; showing the evidence it was given.")
+        unverified = 0
         for key, claim in claim_keys(a):
             if key in bad:
                 claim.unverified = True
-        notices: list[str] = []
-        if bad:
-            notices.append(f"{len(bad)} claim(s) could not be verified and are tagged [unverified].")
+                unverified += 1
+        if unverified:
+            notices.append(f"{unverified} claim(s) could not be verified and are tagged [unverified].")
         if state.get("low_confidence"):
             notices.append("Low confidence: evidence gathering stopped before the grader was satisfied.")
         update: dict[str, Any] = {"answer": a.model_dump(), "messages": [AIMessage(answer_as_text(a))]}
@@ -50,7 +56,9 @@ def make_finalize(deps: Deps):
                 update["title"] = title
             threads.record_turn(deps.db, deps.thread_id, state.get("scope_repos") or [], title)
         update["notices"] = notices
-        ctx.detail = f"{len(bad)} unverified"
+        ctx.detail = f"{unverified} unverified" + (
+            "; empty answer replaced by evidence" if EMPTY_ANSWER in bad else ""
+        )
         return update
 
     return finalize

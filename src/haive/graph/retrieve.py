@@ -194,18 +194,22 @@ def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> li
     evs: list[dict[str, Any]] = []
     if deps.use_ripgrep and (window or not idents):
         # "what changed (recently | in the last 2 weeks | in the last 20 commits)?": list the window itself
+        counted = True  # whether the label already says how many commits
         if window and window.commits:
             newest = _newest(deps, ctx, roots, min(window.commits, MAX_WINDOW_COMMITS), None)
         else:
+            counted = False
             w = window or default_window()
             newest = _newest(deps, ctx, roots, MAX_WINDOW_COMMITS, w.git_since)
             if not window and len(newest) < DEFAULT_MIN_COMMITS:
                 newest = _newest(deps, ctx, roots, RECENT_COMMITS, None)
-                w.label = f"the newest {len(newest)} commits (fewer than {DEFAULT_MIN_COMMITS} in {w.label})"
+                w.label = f"the newest {len(newest)} commits, since fewer than {DEFAULT_MIN_COMMITS} landed in {w.label}"
+                counted = True
             window = w
         evs += [_commit_ev(repo, c, "history window") for repo, c in newest]
         ctx.notices.append(
-            f"History window: {window.label} ({len(newest)} commits)."
+            f"History window: {window.label}"
+            + ("." if counted else f" ({len(newest)} commits).")
             + (
                 " Ask e.g. 'in the last 2 months' or 'last 20 commits' to change it."
                 if not parse_window(q)

@@ -12,6 +12,7 @@ from haive.tools.files import FileAccessError, file_lines
 from haive.types import Answer, Claim, CommitRef, Evidence, RepoRef, WebRef, WebResult
 
 SYMBOL_SLACK = 3
+EMPTY_ANSWER = "answer"  # bad_claims key for an answer with no claims despite evidence
 MIN_SHA = 7
 
 
@@ -176,7 +177,15 @@ def verify(
     ev_paths = {(e.repo, e.path) for e in evidence if e.repo and e.path}
     ev_commits = {(e.repo, e.sha) for e in evidence if e.repo and e.sha}
     urls = {w.url for w in web_results}
-    for key, claim in claim_keys(answer):
+    keys = claim_keys(answer)
+    if not keys and (evidence or web_results):
+        msg = (
+            f"the answer has no claims, but {len(evidence) + len(web_results)} evidence items were retrieved: "
+            "put the findings in sections as claims that cite them"
+        )
+        res.bad_claims[EMPTY_ANSWER] = [msg]
+        res.errors.append(msg)
+    for key, claim in keys:
         errs = check_claim(claim, lines_, ev_paths, urls, ev_commits)
         if errs:
             res.bad_claims[key] = errs
