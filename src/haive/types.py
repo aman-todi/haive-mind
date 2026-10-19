@@ -163,6 +163,13 @@ class Evidence(BaseModel):
     text: str
     why: str = ""
 
+    @property
+    def sha(self) -> str | None:
+        """Abbreviated sha of a commit item (ids are ``commit:{repo}:{sha}``)."""
+        return (
+            self.id.rsplit(":", 1)[1] if self.source == "commit" and self.id.startswith("commit:") else None
+        )
+
 
 class RepoRef(BaseModel):
     repo: str
@@ -172,6 +179,13 @@ class RepoRef(BaseModel):
     symbol: str | None = None
 
 
+class CommitRef(BaseModel):
+    """A commit in this run's evidence; ``sha`` may be abbreviated (7+ hex characters)."""
+
+    repo: str
+    sha: str
+
+
 class WebRef(BaseModel):
     url: str
 
@@ -179,7 +193,7 @@ class WebRef(BaseModel):
 class Claim(BaseModel):
     text: str
     source: Source
-    refs: list[RepoRef | WebRef] = Field(default_factory=list)
+    refs: list[RepoRef | CommitRef | WebRef] = Field(default_factory=list)
     unverified: bool = False  # set by finalize when verification never passed
 
 

@@ -266,6 +266,9 @@ def render_evidence(evidence: list[dict[str, Any]], max_chars: int = 60_000, abb
             body = files.numbered(e["text"], e["start_line"] or 1)
         else:
             header = f"[E{i}] {e['source']}" + (f" repo={e['repo']}" if e.get("repo") else "")
+            sha = Evidence.model_validate(e).sha
+            if sha:
+                header += f" sha={sha}"
             body = e["text"]
         if e.get("why"):
             header += f" ({e['why']})"

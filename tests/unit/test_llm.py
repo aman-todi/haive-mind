@@ -128,3 +128,21 @@ def test_daily_status():
     assert daily_status(10, 1000) == "ok"
     assert daily_status(900, 1000) == "warn"
     assert daily_status(1000, 1000) == "over"
+
+
+def test_meter_records_client_retries_inside_a_call():
+    # The OpenAI client retries timeouts and 429s inside one call; --trace should say so.
+    import logging
+
+    fake = FakeChatModel({"text": ["hi"]})
+    client_log = logging.getLogger("openai._base_client")
+
+    def slow_reply(*a, **kw):
+        client_log.debug("Encountered a timeout exception: %s", "ReadTimeout")
+        client_log.debug("Encountered an HTTP status error: %i", 429)
+        return orig(*a, **kw)
+
+    orig, fake._generate = fake._generate, slow_reply
+    meter = Meter()
+    LLM(Config(), None, factory_for(fake)).text("fast", "hi", meter)
+    assert meter.log[-1]["failed_attempts"] == ["timeout", "HTTP 429"]

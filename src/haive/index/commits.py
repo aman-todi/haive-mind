@@ -31,7 +31,7 @@ def commit_id(repo: str, sha: str) -> str:
     return f"{repo}:commit:{sha}"
 
 
-def _utc(iso: str) -> str:
+def utc_iso(iso: str) -> str:
     try:
         return datetime.fromisoformat(iso).astimezone(UTC).isoformat()
     except ValueError:
@@ -45,7 +45,7 @@ def read_commits(root: Path, repo: str, n: int, rev: str | None = None) -> list[
             CommitInfo(
                 repo=repo,
                 sha=c["sha"],
-                date=_utc(c["date"]),
+                date=utc_iso(c["date"]),
                 author=c["author"],
                 subject=c["subject"],
                 body=c["body"],

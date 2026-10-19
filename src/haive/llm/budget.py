@@ -29,6 +29,31 @@ class _HideBudgetStops(logging.Filter):
 logging.getLogger("langchain_core.callbacks.manager").addFilter(_HideBudgetStops())
 
 
+class _ClientAttempts(logging.Handler):
+    """Failed attempts inside one model call: the OpenAI client retries timeouts, 429s and 5xx on
+    its own, so a slow call is otherwise indistinguishable from a slow model. Read from the
+    client's debug log; with parallel calls (fan-out) an attempt may be credited to a sibling."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.DEBUG)
+        self.events: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        msg = record.getMessage()
+        if msg.startswith("Encountered a timeout"):
+            self.events.append("timeout")
+        elif msg.startswith("Encountered an HTTP status error"):
+            self.events.append(f"HTTP {msg.rsplit(' ', 1)[-1]}")
+        elif msg.startswith("Encountered exception"):
+            self.events.append("connection error")
+
+
+_attempts = _ClientAttempts()
+_client_log = logging.getLogger("openai._base_client")
+_client_log.addHandler(_attempts)
+_client_log.setLevel(logging.DEBUG)
+
+
 class Meter(BaseCallbackHandler):
     """Counts LLM calls made by one graph node (or one CLI action)."""
 
@@ -40,6 +65,7 @@ class Meter(BaseCallbackHandler):
         self.calls = 0
         self.log: list[dict[str, Any]] = []
         self._runs: dict[UUID, tuple[float, str, str]] = {}
+        self._attempt_mark: dict[UUID, int] = {}
 
     def check(self) -> None:
         if self.limit is not None and self.calls >= self.limit:
@@ -59,6 +85,7 @@ class Meter(BaseCallbackHandler):
         model = meta.get("ls_model_name") or (serialized or {}).get("kwargs", {}).get("model_name") or "?"
         self.calls += 1
         self._runs[run_id] = (time.monotonic(), meta.get("haive_role", "?"), str(model))
+        self._attempt_mark[run_id] = len(_attempts.events)
 
     def _finish(self, run_id: UUID, ok: bool, usage: dict[str, Any] | None = None, error: str = "") -> None:
         t0, role, model = self._runs.pop(run_id, (time.monotonic(), "?", "?"))
@@ -67,6 +94,9 @@ class Meter(BaseCallbackHandler):
         }  # fmt: skip
         if error:
             entry["error"] = error[:200]
+        mark = self._attempt_mark.pop(run_id, None)
+        if mark is not None and len(_attempts.events) > mark:
+            entry["failed_attempts"] = _attempts.events[mark:]
         self.log.append(entry)
         if self.db is not None:
             usage = usage or {}

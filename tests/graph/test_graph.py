@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -67,9 +68,27 @@ def test_retries_exhausted_marks_unverified(cfg, db, store):
         },
     )
     res = r.run(Q, thread_id="t")
-    assert nodes(res).count("answer") == 3  # first try + max_answer_retries (2)
+    assert nodes(res).count("answer") == 2  # the retry fixed nothing, so no second retry
+    assert "no progress" in res.state["node_log"][-2]["detail"]
     assert res.answer.sections[0].claims[0].unverified
     assert any("could not be verified" in n for n in res.state["notices"])
+
+
+def test_retry_that_makes_progress_earns_another(cfg, db, store):
+    bad = repo_claim("app/valuation/dcf.py", 900, 950, text="bad lines")
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router(identifiers=["choose_method"])],
+            "GradeOutput": [grade()],
+            "Answer": [answer(bad, bad), answer(bad, DCF_CLAIM), answer(DCF_CLAIM)],
+        },
+    )
+    res = r.run(Q, thread_id="t")
+    assert nodes(res).count("answer") == 3
+    assert not any(c.unverified for c in res.answer.all_claims())
 
 
 def test_grade_missing_symbol_expands(cfg, db, store):
@@ -335,6 +354,32 @@ def test_history_uses_git(cfg, db, store):
     assert any("git log -Sretries" in w for w in whys)
     texts = " ".join(e["text"] for e in res.state["evidence"] if e["source"] == "commit")
     assert "Add retries to the API client" in texts and "flaky" in texts
+
+
+def test_recent_changes_cite_commits(cfg, db, store):
+    root = cfg.repos["valuation"].root
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout
+    good = {"text": "latest commit", "source": "repo", "refs": [{"repo": "valuation", "sha": head[:7]}]}
+    fake_sha = {"text": "made up", "source": "repo", "refs": [{"repo": "valuation", "sha": "deadbeef1"}]}
+    r, fake = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router("history")],
+            "GradeOutput": [grade()],
+            "Answer": [answer(good, fake_sha)],
+        },
+    )
+    res = r.run("what changed recently?", thread_id="t")
+    whys = [e["why"] for e in res.state["evidence"]]
+    assert "recent commit" in whys[0] and not any("git log -S" in w for w in whys)
+    assert f"sha={head[:12]}" in str(fake.messages[-1])  # commit shas are in the evidence headers
+    good_claim, bad_claim = res.answer.sections[0].claims
+    assert not good_claim.unverified and bad_claim.unverified
+    assert "commit was not among the retrieved evidence" in " ".join(res.state["verify_errors"])
 
 
 def test_recall_groups_by_repo(cfg, db, store, other_repo):

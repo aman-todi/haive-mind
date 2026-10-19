@@ -1,2 +1,2 @@
-<!-- version: 1 -->
-Answer template (history): a "Timeline" section with one claim per relevant commit, oldest first: date, short sha, what changed and why (from the commit message). Commits are evidence too: cite a commit with a RepoRef only if a file and line range from the evidence back it; otherwise state the commit facts with source "repo" and a ref to the changed file lines when available, or make it a "model" claim. Finish with a short "Why" section.
+<!-- version: 2 -->
+Answer template (history): a "Timeline" section with one claim per relevant commit, oldest first: date, short sha, and what changed and why (from the commit message). Cite each commit with a CommitRef {repo, sha} using the sha from its evidence header. Where current code from the evidence shows the result of a change, you may add a RepoRef to those lines. Finish with a short "Why" section.

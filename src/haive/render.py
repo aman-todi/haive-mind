@@ -11,15 +11,17 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from haive.types import Answer, Claim, RepoRef, WebRef
+from haive.types import Answer, Claim, CommitRef, RepoRef, WebRef
 
 TAG_STYLE = {"repo": "bold green", "web": "bold blue", "model": "bold magenta", "unverified": "bold red"}
 CONF_STYLE = {"high": "green", "med": "yellow", "low": "red"}
 
 
-def fmt_ref(r: RepoRef | WebRef) -> str:
+def fmt_ref(r: RepoRef | CommitRef | WebRef) -> str:
     if isinstance(r, WebRef):
         return r.url
+    if isinstance(r, CommitRef):
+        return f"{r.repo}@{r.sha[:7]}"
     rng = f"{r.start_line}" if r.start_line == r.end_line else f"{r.start_line}-{r.end_line}"
     return f"{r.repo}/{r.path}:{rng}"
 
@@ -99,6 +101,8 @@ def render_trace(console: Console, node_log: list[dict[str, Any]]) -> None:
             step, detail = f"[bold]{e['node']}[/]", escape(e.get("detail", ""))
         elif kind == "llm":
             ok = "" if e.get("ok") else f" [red]{escape(e.get('error', 'error'))}[/]"
+            if e.get("failed_attempts"):
+                ok += f" [yellow](after failed attempts: {escape(', '.join(e['failed_attempts']))})[/]"
             step, detail = "  llm", f"{e['role']} → {escape(e['model'])}{ok}"
         else:
             step, detail = f"  {kind}", escape(e.get("name", "") + " " + e.get("detail", ""))

@@ -4,7 +4,7 @@ A personal, local-first CLI that answers questions about, and helps debug, **you
 
 haive indexes your repos (code, config, docs, and the last 300 commit messages) into a vector store, then runs a
 LangGraph agent that mixes vector search with deterministic tools (ripgrep, file reads, git), optional
-web search, and several LLMs. Answers come with verified `file:line` citations, and every claim is
+web search, and several LLMs. Answers come with verified `file:line` (or commit) citations, and every claim is
 labeled by where it came from:
 
 - **[repo]**: backed by code that was retrieved this run and re-checked against your working tree

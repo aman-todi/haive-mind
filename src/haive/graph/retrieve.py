@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Any
 
 from haive.graph.state import Deps, GraphState, NodeCtx, ev_from_hit, ev_from_snippet
+from haive.index.commits import utc_iso
 from haive.tools import files, git, ripgrep
 from haive.types import Evidence
 
@@ -150,9 +151,13 @@ def recall(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> lis
     return _dedupe_overlaps(evs)[:14]
 
 
+RECENT_COMMITS = 12
+
+
 def _commit_ev(repo: str, c: dict[str, Any], why: str) -> dict[str, Any]:
     files_ = ", ".join(c.get("files", [])[:12])
-    text = f"commit {c['sha'][:12]}  {c['date']}  {c['author']}\n{c['subject']}\n{c.get('body', '')}".strip()
+    text = f"commit {c['sha'][:12]}  {utc_iso(c['date'])}  {c['author']}\n{c['subject']}\n{c.get('body', '')}"
+    text = text.strip()
     if files_:
         text += f"\nfiles: {files_}"
     if c.get("patch"):
@@ -167,16 +172,30 @@ def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> li
     idents = state.get("identifiers") or []
     roots = deps.roots(scope)
     evs: list[dict[str, Any]] = []
+    if deps.use_ripgrep and not idents:
+        # "what changed recently?": no code names to search for, so the newest commits in scope answer it
+        recent = [
+            (utc_iso(c["date"]), repo, c)
+            for repo, root in roots.items()
+            for c in ctx.timed(
+                "git log",
+                f"{repo} -n{RECENT_COMMITS}",
+                lambda r=root: git.log(r, n=RECENT_COMMITS, numstat=True),
+            )
+        ]
+        for _, repo, c in sorted(recent, key=lambda x: x[0], reverse=True)[:RECENT_COMMITS]:
+            evs.append(_commit_ev(repo, c, "recent commit"))
     if deps.use_vector:
         evs += vector_evidence(deps, q, scope, ["commit"], 8, ctx, "commit search")
     if deps.use_ripgrep:
         terms = idents or keywords(q)[:3]
         for repo, root in roots.items():
             for t in terms[:4]:
-                for c in ctx.timed(
-                    "git log -S", t, lambda r=root, t=t: git.log(r, n=6, pickaxe=t, numstat=True)
-                ):
-                    evs.append(_commit_ev(repo, c, f"git log -S{t}"))
+                if idents:  # pickaxe on plain words ("changed") matches unrelated code
+                    for c in ctx.timed(
+                        "git log -S", t, lambda r=root, t=t: git.log(r, n=6, pickaxe=t, numstat=True)
+                    ):
+                        evs.append(_commit_ev(repo, c, f"git log -S{t}"))
                 for c in ctx.timed(
                     "git log --grep", t, lambda r=root, t=t: git.log(r, n=4, grep=t, numstat=True)
                 ):

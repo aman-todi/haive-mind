@@ -48,7 +48,7 @@ def get_model(model_id: str, cfg: Config, rate_limiter: InMemoryRateLimiter | No
         "model_provider": m.provider,
         "temperature": 0,
         "max_retries": m.max_retries,
-        "timeout": 120,
+        "timeout": m.timeout_seconds,
     }
     if rate_limiter is not None:
         kwargs["rate_limiter"] = rate_limiter

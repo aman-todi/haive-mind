@@ -10,7 +10,7 @@ from haive.graph.verify import claim_keys, verify
 from haive.llm.budget import BudgetExceeded
 from haive.llm.models import LLMError
 from haive.llm.structured import structured
-from haive.types import Answer, Claim, Evidence, ParsedTrace, RepoRef, Section, WebResult
+from haive.types import Answer, Claim, CommitRef, Evidence, ParsedTrace, RepoRef, Section, WebResult
 
 
 def render_web(results: list[dict[str, Any]]) -> str:
@@ -23,7 +23,17 @@ def fallback_answer(state: GraphState, reason: str) -> Answer:
     """Deterministic answer from the evidence when the model can't (or may not) be called."""
     claims = []
     for e in state.get("evidence") or []:
-        if e.get("path") and e.get("repo") and e.get("start_line"):
+        sha = Evidence.model_validate(e).sha
+        if sha and e.get("repo"):
+            subject = (e["text"].split("\n") + [""])[1].strip()
+            claims.append(
+                Claim(
+                    text=f"Commit: {subject or e.get('why') or sha}",
+                    source="repo",
+                    refs=[CommitRef(repo=e["repo"], sha=sha)],
+                )
+            )
+        elif e.get("path") and e.get("repo") and e.get("start_line"):
             claims.append(
                 Claim(
                     text=f"Relevant: {e.get('why') or e['path']}",
@@ -68,9 +78,10 @@ def make_answer(deps: Deps):
         errors = ""
         if state.get("verify_errors"):
             errors = (
-                "Your previous answer failed verification. Fix these problems: cite only paths and line ranges shown "
-                "in the evidence headers, keep symbols inside the cited lines, and change unsupported claims to "
-                "source 'model' with no refs.\n- " + "\n- ".join(state["verify_errors"][:15])
+                "Your previous answer failed verification. Fix these problems: cite only paths and line ranges, or "
+                "commit shas, shown in the evidence headers; keep symbols inside the cited lines; and change "
+                "unsupported claims to source 'model' with no refs.\n- "
+                + "\n- ".join(state["verify_errors"][:15])
             )
         prompt = prompts.messages(
             "answer_common",
@@ -124,15 +135,18 @@ def make_verify(deps: Deps):
                 "repo_claims_ok": len([k for k in repo_claims if k not in res.bad_claims]),
             }
         retries = state.get("answer_retries", 0)
+        # A retry that fixed less than half of the remaining problems won't be helped by another one.
+        stuck = retries > 0 and len(res.bad_claims) * 2 > len(state.get("bad_claims") or {})
         retry = (
             bool(res.bad_claims)
+            and not stuck
             and retries < deps.cfg.limits.max_answer_retries
             and deps.remaining(state) > 0
         )
         update["retry_answer"] = retry
         if retry:
             update["answer_retries"] = retries + 1
-        ctx.detail = f"{len(res.bad_claims)} bad claims; retry={retry}"
+        ctx.detail = f"{len(res.bad_claims)} bad claims; retry={retry}" + ("; no progress" if stuck else "")
         return update
 
     return verify_node

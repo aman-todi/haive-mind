@@ -121,3 +121,16 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     expand, and web search use, and identifiers are pulled from it. The answer model still sees the
     original message plus history. No extra call: the router runs every turn anyway. A notice shows
     how the follow-up was read.
+
+27. **Commits are citable.** Claims cite `RepoRef` (file lines), `CommitRef` (`{repo, sha}`), or
+    `WebRef`. History answers were built from commit evidence but could only cite file lines, so the
+    model cited changed files it never saw and every claim failed verification. A commit ref passes when
+    its sha (7+ hex) matches a commit retrieved in this run. "What changed recently?" questions (no
+    identifiers) now fetch the newest commits in scope directly; `git log -S` runs only on real
+    identifiers, since pickaxe on plain words matches unrelated code.
+
+28. **Answer retries stop when they stop helping.** A verify retry that fixes less than half of the
+    remaining bad claims ends the loop: the same model with the same evidence rarely does better on a
+    third try, and each try on a free strong model costs 30–60 s. The request timeout dropped from 120 s
+    to 90 s (`models.timeout_seconds`), and `--trace` shows the OpenAI client's own failed attempts
+    (timeouts, 429s) inside a call, which were previously invisible.

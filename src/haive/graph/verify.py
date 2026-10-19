@@ -1,5 +1,6 @@
 """Answer verification (pure code). Checks every claim's provenance against the live tree,
-this run's evidence, and this run's web results, plus the suggested diff in debug answers."""
+this run's evidence (files and commits), and this run's web results, plus the suggested diff in
+debug answers."""
 
 from __future__ import annotations
 
@@ -8,9 +9,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from haive.tools.files import FileAccessError, file_lines
-from haive.types import Answer, Claim, Evidence, RepoRef, WebRef, WebResult
+from haive.types import Answer, Claim, CommitRef, Evidence, RepoRef, WebRef, WebResult
 
 SYMBOL_SLACK = 3
+MIN_SHA = 7
 
 
 @dataclass
@@ -72,25 +74,42 @@ def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, 
     return errs
 
 
+def check_commit_ref(ref: CommitRef, evidence_commits: set[tuple[str, str]]) -> list[str]:
+    loc = f"{ref.repo}@{ref.sha}"
+    sha = ref.sha.strip().lower()
+    if len(sha) < MIN_SHA or not all(ch in "0123456789abcdef" for ch in sha):
+        return [f"{loc}: not a commit sha (use at least {MIN_SHA} hex characters from the evidence)"]
+    if not any(r == ref.repo and (s.startswith(sha) or sha.startswith(s)) for r, s in evidence_commits):
+        return [f"{loc}: commit was not among the retrieved evidence"]
+    return []
+
+
 def check_claim(
-    claim: Claim, lines_: _Lines, evidence_paths: set[tuple[str, str]], web_urls: set[str]
+    claim: Claim,
+    lines_: _Lines,
+    evidence_paths: set[tuple[str, str]],
+    web_urls: set[str],
+    evidence_commits: set[tuple[str, str]],
 ) -> list[str]:
     repo_refs = [r for r in claim.refs if isinstance(r, RepoRef)]
+    commit_refs = [r for r in claim.refs if isinstance(r, CommitRef)]
     web_refs = [r for r in claim.refs if isinstance(r, WebRef)]
     if claim.source == "model":
         return ["model claim must not have refs"] if claim.refs else []
     if claim.source == "web":
-        if not web_refs or repo_refs:
+        if not web_refs or repo_refs or commit_refs:
             return ["web claim needs web refs only"]
         return [f"url not in this run's web results: {r.url}" for r in web_refs if r.url not in web_urls]
     # repo
-    if not repo_refs:
-        return ["repo claim needs at least one repo ref"]
+    if not repo_refs and not commit_refs:
+        return ["repo claim needs at least one file or commit ref"]
     errs = []
     if web_refs:
         errs.append("repo claim must cite repo refs only")
     for r in repo_refs:
         errs += check_repo_ref(r, lines_, evidence_paths)
+    for c in commit_refs:
+        errs += check_commit_ref(c, evidence_commits)
     return errs
 
 
@@ -155,9 +174,10 @@ def verify(
     res = VerifyResult()
     lines_ = _Lines(roots)
     ev_paths = {(e.repo, e.path) for e in evidence if e.repo and e.path}
+    ev_commits = {(e.repo, e.sha) for e in evidence if e.repo and e.sha}
     urls = {w.url for w in web_results}
     for key, claim in claim_keys(answer):
-        errs = check_claim(claim, lines_, ev_paths, urls)
+        errs = check_claim(claim, lines_, ev_paths, urls, ev_commits)
         if errs:
             res.bad_claims[key] = errs
             snippet = claim.text[:80].replace("\n", " ")
