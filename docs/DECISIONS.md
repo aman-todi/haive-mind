@@ -167,3 +167,9 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     returned a summary and empty sections; with nothing to check, it passed. Now it is retried once
     with an explicit instruction, and if it is still empty, finalize keeps the model's summary and lists
     the retrieved evidence (up to 12 items, commits cited by sha) under it, with a notice saying so.
+
+35. **The answer schema requires its content.** DeepSeek V4 Pro, called with the `Answer` tool schema,
+    returned in 3 s with only `summary`, the one required field. `sections` (and each section's and
+    hypothesis's `claims`) are now required in the JSON schema models see, via `json_schema_extra`,
+    with descriptions saying the answer goes there; Python code can still build an empty `Answer`.
+    The empty-answer retry (#34) stays as the backstop.

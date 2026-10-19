@@ -8,9 +8,10 @@ stay JSON-friendly; convert back with ``Model.model_validate``.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 ChunkKind = Literal["code", "config", "doc", "commit"]
 Intent = Literal["lookup", "recall", "history", "debug", "compare", "architecture", "general"]
@@ -197,9 +198,22 @@ class Claim(BaseModel):
     unverified: bool = False  # set by finalize when verification never passed
 
 
+def _schema_requires(*names: str) -> Callable[[dict[str, Any]], None]:
+    """Mark fields required in the JSON schema sent to models, while Python code may still omit them.
+    Some models fill in only required fields of a tool schema (a paid model answered with a summary and
+    no sections)."""
+
+    def add(schema: dict[str, Any]) -> None:
+        schema["required"] = sorted({*schema.get("required", []), *names})
+
+    return add
+
+
 class Section(BaseModel):
+    model_config = ConfigDict(json_schema_extra=_schema_requires("claims"))
+
     heading: str | None = None
-    claims: list[Claim] = Field(default_factory=list)
+    claims: list[Claim] = Field(default_factory=list, description="one entry per fact, each with its refs")
 
 
 class SuggestedFix(BaseModel):
@@ -208,14 +222,20 @@ class SuggestedFix(BaseModel):
 
 
 class Hypothesis(BaseModel):
+    model_config = ConfigDict(json_schema_extra=_schema_requires("claims"))
+
     title: str
     confidence: Confidence = "low"
     claims: list[Claim] = Field(default_factory=list)
 
 
 class Answer(BaseModel):
-    summary: str
-    sections: list[Section] = Field(default_factory=list)
+    model_config = ConfigDict(json_schema_extra=_schema_requires("sections"))
+
+    summary: str = Field(description="1-3 sentences; the details belong in sections")
+    sections: list[Section] = Field(
+        default_factory=list, description="the answer itself: findings as claims grouped under headings"
+    )
     suggested_fix: SuggestedFix | None = None
     hypotheses: list[Hypothesis] | None = None
     followups: list[str] = Field(default_factory=list)

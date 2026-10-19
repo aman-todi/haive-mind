@@ -110,3 +110,13 @@ def test_response_time_is_printed_first():
     assert lines[0] == "⏱ response time 1m 02s"
     assert lines[-1] == "scope: a · LLM calls: 3"  # not repeated in the footer
     assert fmt_duration(7.25) == "7.2s"
+
+
+def test_answer_schema_requires_sections_for_models():
+    # A paid model filled in only the required `summary`; the schema models see must require the content.
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
+    params = convert_to_openai_tool(Answer)["function"]["parameters"]
+    assert set(params["required"]) == {"summary", "sections"}
+    assert '"required": ["claims"]' in json.dumps(params)
+    assert Answer(summary="s").sections == []  # code may still build an empty answer
