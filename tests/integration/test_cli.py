@@ -239,13 +239,15 @@ def test_add_validation(cli, sample_repo, tmp_path):
     assert cli("add", str(sample_repo), "--name", "bad:name", ok=False).exit_code == 1
 
 
-def test_paid_flag_uses_strong_paid_model(cli, sample_repo):
+def test_paid_flag_uses_paid_models(cli, sample_repo):
     setup_repo(cli, sample_repo)
+    paid = ["deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4-pro-0813"]
     cli("ask", "Where does the DCF choose a valuation method?", "--json")
-    assert "deepseek/deepseek-v4-pro-0813" not in cli.built
+    assert not any(p in cli.built for p in paid)
     cli("ask", "Where does the DCF choose a valuation method?", "--json", "--paid")
-    assert "deepseek/deepseek-v4-pro-0813" in cli.built
-    assert "strong_paid: deepseek/deepseek-v4-pro-0813  (off" in cli("status").output
+    assert all(p in cli.built for p in paid)
+    status = cli("status").output
+    assert "fast_paid: deepseek/deepseek-v4.1-flash-1017\n" in status and "paid models are off" in status
 
 
 def test_batch_add_scan_and_multiple_paths(cli, sample_repo, other_repo, tmp_path):

@@ -15,7 +15,7 @@ says exactly what goes where.
 
 | Destination | What | When |
 |---|---|---|
-| **LLM provider** (OpenRouter by default) | Your question, recent chat turns, and the code/config/doc snippets, commit messages, and trace text retrieved for it | Every question (router, grader, expand planner, answer, titles). With `--paid`, the answer goes to the paid model's provider |
+| **LLM provider** (OpenRouter by default) | Your question, recent chat turns, and the code/config/doc snippets, commit messages, and trace text retrieved for it | Every question (router, grader, expand planner, answer, titles). With `--paid`, all of these go to the paid models' provider |
 | **Pinecone** (default store) | Vectors plus chunk text and metadata (repo, path, symbol, lines) for everything indexed | `haive index` and freshness re-indexing |
 | **Web search** (DuckDuckGo or Tavily) | A search query, which may include an error message fragment or a library name | Only when web mode allows (`ask` asks first; `off` never) |
 | **GitHub / your git host** | Normal git traffic | `haive add <url>` (clone) and `haive sync` (pull) |

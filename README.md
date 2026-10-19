@@ -163,8 +163,9 @@ batch_size = 8
 [models]                      # OpenRouter model IDs (any OpenAI-compatible endpoint works)
 fast = "nvidia/nemotron-3-super-120b-a12b:free"    # router, grader, rewrite, expand planner, titles, summaries
 strong = "nvidia/nemotron-3-ultra-550b-a55b:free"  # answer, diagnose, synthesis
-strong_paid = "deepseek/deepseek-v4-pro-0813"      # used with --paid or use_paid_strong = true
-use_paid_strong = false
+fast_paid = "deepseek/deepseek-v4.1-flash-1017"    # used with --paid or use_paid = true
+strong_paid = "deepseek/deepseek-v4-pro-0813"      # used with --paid or use_paid = true
+use_paid = false
 fallback = ["nvidia/nemotron-3-super-120b-a12b:free", "openrouter/free"]
 requests_per_minute = 20      # client-side throttle
 max_retries = 2               # per model (honors Retry-After) before falling back
@@ -195,12 +196,14 @@ haive uses two OpenRouter roles, plus a fallback chain tried when a model keeps 
 |---|---|---|---|
 | fast | `nvidia/nemotron-3-super-120b-a12b:free` | `google/gemma-4-26b-a4b-it:free` | router, grader, query rewrite, expand planner, per-repo summaries, chat titles |
 | strong | `nvidia/nemotron-3-ultra-550b-a55b:free` | `poolside/laguna-s-2.1:free` | answers and debug diagnoses |
-| strong (paid, off by default) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98 per 1M tokens) | `anthropic/claude-sonnet-5.5` ($2 / $10) | the same, when you pass `--paid` or set `use_paid_strong = true` |
+| fast (paid, off by default) | `deepseek/deepseek-v4.1-flash-1017` ($0.15 / $0.60 per 1M tokens) | `openai/gpt-oss-120b` ($0.15 / $0.60, very high throughput) | the fast role, when you pass `--paid` or set `use_paid = true` |
+| strong (paid, off by default) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98 per 1M tokens) | `anthropic/claude-sonnet-5.5` ($2 / $10) | the strong role, with the same switch |
 
 Picks were checked against OpenRouter's live model list in October 2026; free models come and go, so
 check the list before relying on them and use `haive eval --models fast=… strong=…` to compare. A
-typical question makes 3 calls (router, grader, answer); `--paid` only changes the answer call, which
-costs about $0.01 with DeepSeek at ~15k tokens of evidence. Paid models also avoid the free tier's
+typical question makes 3 calls (router, grader, answer); with `--paid` that is roughly $0.01-0.03 a
+question, almost all of it the answer call at ~15k tokens of evidence (the fast calls are a fraction of a
+cent). Paid models also avoid the free tier's
 rate limits, and you can choose providers that don't train on prompts.
 
 ## How it works

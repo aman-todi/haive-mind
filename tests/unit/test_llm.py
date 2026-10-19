@@ -103,13 +103,13 @@ def test_text_and_fallback():
         make(FakeChatModel({"text": [api_error(503)]})).text("fast", "hi", Meter())
 
 
-def test_paid_strong_switch():
+def test_paid_switch_covers_fast_and_strong():
     cfg = cfg_for()
     llm = LLM(cfg, None, factory_for(FakeChatModel()))
-    assert llm.model_ids("strong")[0] == cfg.models.strong
-    cfg.models.use_paid_strong = True
+    assert llm.model_ids("strong")[0] == cfg.models.strong and llm.model_ids("fast")[0] == "m1"
+    cfg.models.use_paid = True
     assert llm.model_ids("strong") == ["deepseek/deepseek-v4-pro-0813", "m2"]
-    assert llm.model_ids("fast")[0] == "m1"  # paid only affects the strong role
+    assert llm.model_ids("fast")[0] == "deepseek/deepseek-v4.1-flash-1017"
 
 
 def test_get_model_wiring(monkeypatch):

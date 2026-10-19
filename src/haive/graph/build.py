@@ -159,7 +159,7 @@ def build_graph(deps: Deps, checkpointer: Any = None):
 class RunResult:
     answer: Answer | None
     state: dict[str, Any]
-    latency_s: float
+    latency_s: float  # haive's own time: excludes waiting on the user at clarify / web prompts
     interrupts: list[dict[str, Any]] = field(default_factory=list)
 
     def meta(self) -> dict[str, Any]:
@@ -222,11 +222,14 @@ class Runner:
         result = self.app.invoke(inp, config)
         seen: list[dict[str, Any]] = []
         defaulted: list[str] = []
+        user_s = 0.0  # time spent waiting on the user (clarify / web prompts), not on haive
         while result.get("__interrupt__"):
             payload = result["__interrupt__"][0].value
             seen.append(payload)
             if interactive and on_interrupt is not None:
+                t_ask = time.monotonic()
                 value = on_interrupt(payload)
+                user_s += time.monotonic() - t_ask
             else:
                 value = default_interrupt(payload)
                 defaulted.append(_defaulted(payload))
@@ -235,4 +238,4 @@ class Runner:
         if defaulted:
             state["notices"] = [*(state.get("notices") or []), *(f"Non-interactive: {d}." for d in defaulted)]
         ans = Answer.model_validate(state["answer"]) if state.get("answer") else None
-        return RunResult(ans, state, time.monotonic() - t0, seen)
+        return RunResult(ans, state, time.monotonic() - t0 - user_s, seen)

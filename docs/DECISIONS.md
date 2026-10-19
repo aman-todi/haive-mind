@@ -153,3 +153,12 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
 31. **The strong role falls back to the fast model first.** `fallback` defaults to
     `[nemotron-3-super, openrouter/free]`; a role skips its own model, so a stalled or rate-limited
     Ultra drops to Super (same family, faster) before the generic free router.
+
+32. **One paid switch for both roles.** `use_paid` (or `--paid`) swaps fast to `fast_paid`
+    (`deepseek/deepseek-v4.1-flash-1017`, $0.15 / $0.60 per 1M tokens) and strong to `strong_paid`. A
+    paid answer behind a free router and grader still waited on free-tier rate limits and stalls for
+    half its calls. The fast pick is a dated snapshot, like `strong_paid`, so its behavior and price
+    don't move under a floating alias; one provider for both roles also means one data policy to review.
+
+33. **Response time is shown above every answer**, with or without `--trace`. It excludes time spent at
+    clarify and web prompts (the user's time, not haive's), so it reads the same in chat and one-shot.

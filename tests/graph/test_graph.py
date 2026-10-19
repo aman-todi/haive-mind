@@ -288,6 +288,19 @@ def test_vague_question_asks_then_reroutes(cfg, db, store):
     assert any(n.startswith("Clarified: Which operation") for n in res.state["notices"])
 
 
+def test_response_time_excludes_time_at_prompts(cfg, db, store):
+    import time
+
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {"RouterOutput": [VAGUE], "GradeOutput": [grade()], "Answer": [answer(DCF_CLAIM)]},
+    )
+    res = r.run("is it slow?", thread_id="t", on_interrupt=lambda p: time.sleep(1.5) or "")
+    assert res.latency_s < 1.5
+
+
 def test_vague_question_non_interactive_answers_as_asked(cfg, db, store):
     r, fake = make_runner(
         cfg,

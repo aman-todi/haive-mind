@@ -47,7 +47,8 @@ err = Console(stderr=True)
 RepoOpt = Annotated[list[str] | None, typer.Option("--repo", "-r", help="Limit to a repo (repeatable).")]
 GroupOpt = Annotated[list[str] | None, typer.Option("--group", "-g", help="Limit to a group (repeatable).")]
 PaidOpt = Annotated[
-    bool, typer.Option("--paid", help="Answer with models.strong_paid instead of the free strong model.")
+    bool,
+    typer.Option("--paid", help="Use models.fast_paid and models.strong_paid instead of the free models."),
 ]
 WebOpt = Annotated[
     str | None, typer.Option("--web", help="Web search: off | ask | auto (default from config).")
@@ -570,10 +571,12 @@ def status() -> None:
         console.print(f"  [red]unavailable:[/] {escape(str(e))}")
     console.print("\n[bold]Models[/]")
     m = cfg.models
+    free, paid = ("", "  (in use)") if m.use_paid else ("  (in use)", "")
     console.print(
-        f"  fast: {m.fast}\n  strong: {m.strong}{'' if m.use_paid_strong else '  (in use)'}\n"
-        f"  strong_paid: {m.strong_paid}{'  (in use)' if m.use_paid_strong else '  (off; --paid or use_paid_strong)'}\n"
-        f"  fallback: {', '.join(m.fallback)}\n  endpoint: {m.base_url}"
+        f"  fast: {m.fast}{free}\n  strong: {m.strong}{free}\n"
+        f"  fast_paid: {m.fast_paid}{paid}\n  strong_paid: {m.strong_paid}{paid}\n"
+        + ("" if m.use_paid else "  paid models are off; use --paid or set use_paid = true\n")
+        + f"  fallback: {', '.join(m.fallback)}\n  endpoint: {m.base_url}"
     )
     console.print("\n[bold]LLM usage today[/]")
     used = rt.db.calls_today()
@@ -674,7 +677,7 @@ def _one_shot(
     rt = runtime()
     _budget_gate(rt, force)
     if paid:
-        rt.cfg.models.use_paid_strong = True
+        rt.cfg.models.use_paid = True
     runner = rt.runner()
     tid = f"oneshot-{uuid.uuid4().hex}"
     try:
@@ -819,7 +822,7 @@ def chat(
     rt = runtime()
     _budget_gate(rt, force)
     if paid:
-        rt.cfg.models.use_paid_strong = True
+        rt.cfg.models.use_paid = True
     runner = rt.runner(persist_thread=True)
     scope = _scope(repo, group)
     web_mode = _web_mode(web) or rt.cfg.web.mode

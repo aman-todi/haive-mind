@@ -47,8 +47,9 @@ class EmbeddingsConfig(BaseModel):
 class ModelsConfig(BaseModel):
     fast: str = "nvidia/nemotron-3-super-120b-a12b:free"  # alt: google/gemma-4-26b-a4b-it:free
     strong: str = "nvidia/nemotron-3-ultra-550b-a55b:free"  # alt: poolside/laguna-s-2.1:free
-    strong_paid: str = "deepseek/deepseek-v4-pro-0813"  # used when use_paid_strong (or --paid)
-    use_paid_strong: bool = False
+    fast_paid: str = "deepseek/deepseek-v4.1-flash-1017"  # used for fast when use_paid (or --paid)
+    strong_paid: str = "deepseek/deepseek-v4-pro-0813"  # used for strong when use_paid (or --paid)
+    use_paid: bool = False
     # Tried in order after a role's own model fails; a role skips its own model, so strong falls back to
     # the fast model first and fast goes straight to openrouter/free.
     fallback: list[str] = Field(

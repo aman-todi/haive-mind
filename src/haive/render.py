@@ -40,9 +40,18 @@ def claim_markup(c: Claim) -> str:
     return out
 
 
+def fmt_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m, s = divmod(round(seconds), 60)
+    return f"{m}m {s:02d}s"
+
+
 def render_answer(console: Console, answer: Answer, meta: dict[str, Any] | None = None) -> None:
     meta = meta or {}
     console.print()
+    if "latency_s" in meta:
+        console.print(f"[dim]⏱ response time {fmt_duration(meta['latency_s'])}[/]")
     console.print(
         Panel(escape(answer.summary), title=f"[bold]{meta.get('intent', 'answer')}[/]", expand=True)
     )
@@ -76,8 +85,6 @@ def render_answer(console: Console, answer: Answer, meta: dict[str, Any] | None 
         footer.append(f"scope: {', '.join(meta['scope'])}")
     if "llm_calls" in meta:
         footer.append(f"LLM calls: {meta['llm_calls']}")
-    if "latency_s" in meta:
-        footer.append(f"{meta['latency_s']:.1f}s")
     console.print()
     for n in notices:
         console.print(f"[dim]• {escape(n)}[/]")

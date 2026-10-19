@@ -3,7 +3,7 @@ import json
 from rich.console import Console
 
 from haive.graph.verify import parse_diff, verify
-from haive.render import render_answer, render_trace, to_json
+from haive.render import fmt_duration, render_answer, render_trace, to_json
 from haive.types import Answer, Claim, Evidence, Hypothesis, RepoRef, Section, SuggestedFix, WebRef, WebResult
 
 
@@ -101,3 +101,12 @@ def test_render_and_json():
         ],
     )
     assert "router" in con2.export_text()
+
+
+def test_response_time_is_printed_first():
+    console = Console(record=True, width=100)
+    render_answer(console, Answer(summary="s"), {"latency_s": 62.4, "llm_calls": 3, "scope": ["a"]})
+    lines = [ln for ln in console.export_text().splitlines() if ln.strip()]
+    assert lines[0] == "⏱ response time 1m 02s"
+    assert lines[-1] == "scope: a · LLM calls: 3"  # not repeated in the footer
+    assert fmt_duration(7.25) == "7.2s"

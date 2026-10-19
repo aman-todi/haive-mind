@@ -95,8 +95,8 @@ class LLM:
 
     def primary(self, role: str) -> str:
         m = self.cfg.models
-        if role == "strong" and m.use_paid_strong:
-            return m.strong_paid
+        if m.use_paid and role in ("fast", "strong"):
+            return getattr(m, f"{role}_paid")
         return getattr(m, role)
 
     def model_ids(self, role: str) -> list[str]:
