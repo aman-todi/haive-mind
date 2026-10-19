@@ -173,3 +173,8 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     hypothesis's `claims`) are now required in the JSON schema models see, via `json_schema_extra`,
     with descriptions saying the answer goes there; Python code can still build an empty `Answer`.
     The empty-answer retry (#34) stays as the backstop.
+
+36. **Freshness runs after the router.** It ran first, before the scope was known, so it checked every
+    registered repo; pulling haive-mind cost a weatherpruf question 6 s of re-indexing. Now the router
+    resolves the scope and freshness checks only those repos, as the spec intended. General questions
+    skip it.

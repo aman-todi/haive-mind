@@ -25,7 +25,7 @@ def test_lookup_happy_path(cfg, db, store):
         },
     )
     res = r.run(Q, thread_id="t")
-    assert nodes(res) == ["freshness", "router", "retrieve", "grade", "answer", "verify", "finalize"]
+    assert nodes(res) == ["router", "freshness", "retrieve", "grade", "answer", "verify", "finalize"]
     assert res.state["llm_calls"] == 3 and fake.calls == ["RouterOutput", "GradeOutput", "Answer"]
     assert not res.answer.sections[0].claims[0].unverified
     assert res.meta()["first_verify"] == {"repo_claims": 1, "repo_claims_ok": 1}
@@ -103,7 +103,7 @@ def test_grade_missing_symbol_expands(cfg, db, store):
         },
     )
     res = r.run("How does create_valuation work?", thread_id="t")
-    assert nodes(res)[:6] == ["freshness", "router", "retrieve", "grade", "expand", "grade"]
+    assert nodes(res)[:6] == ["router", "freshness", "retrieve", "grade", "expand", "grade"]
     assert any("definition of choose_method" in e["why"] for e in res.state["evidence"])
     assert res.state["loops"] == 1
 
@@ -145,7 +145,7 @@ def test_nothing_relevant_rewrites_then_general(cfg, db, store):
     )
     res = r.run("how does pagination work", thread_id="t", web_mode="off")
     ns = nodes(res)
-    assert ns[:7] == ["freshness", "router", "retrieve", "grade", "rewrite", "retrieve", "grade"]
+    assert ns[:7] == ["router", "freshness", "retrieve", "grade", "rewrite", "retrieve", "grade"]
     assert "to_general" in ns and "maybe_web" in ns
     assert res.state["intent"] == "general"
     assert any("Web search is off" in n for n in res.state["notices"])
@@ -257,7 +257,7 @@ def test_clarify_interrupt(cfg, db, store, other_repo):
     assert asked[0]["kind"] == "clarify" and "frontend" in asked[0]["options"]
     assert res.state["scope_repos"] == ["frontend"]
     assert fake.calls.count("RouterOutput") == 1  # router output is reused after clarification
-    assert nodes(res)[:4] == ["freshness", "router", "clarify", "router"]
+    assert nodes(res)[:4] == ["router", "clarify", "router", "freshness"]
 
 
 VAGUE = router(
@@ -282,7 +282,7 @@ def test_vague_question_asks_then_reroutes(cfg, db, store):
     asked = []
     res = r.run("is it slow?", thread_id="t", on_interrupt=lambda p: asked.append(p) or "answering questions")
     assert asked[0]["about"] == "question" and asked[0]["options"] == ["indexing", "answering questions"]
-    assert nodes(res)[:4] == ["freshness", "router", "clarify", "router"]
+    assert nodes(res)[:4] == ["router", "clarify", "router", "freshness"]
     assert fake.calls.count("RouterOutput") == 2  # routed again with the answer folded in
     assert res.state["question"] == "is it slow? (answering questions)"
     assert any(n.startswith("Clarified: Which operation") for n in res.state["notices"])
@@ -537,7 +537,7 @@ def test_debug_python_trace(cfg, db, store):
     trace = (TRACES / "python_chained.txt").read_text()
     res = r.run("", trace_text=trace, thread_id="t", web_mode="off")
     assert res.state["intent"] == "debug" and "RouterOutput" not in fake.calls
-    assert nodes(res)[:4] == ["freshness", "router", "parse_trace", "gather_debug"]
+    assert nodes(res)[:4] == ["router", "freshness", "parse_trace", "gather_debug"]
     pt = res.state["parsed_trace"]
     assert any(f["repo_path"] == "app/valuation/dcf.py" for f in pt["frames"])
     frame_ev = [e for e in res.state["evidence"] if e["why"].startswith("frame #")]
@@ -655,6 +655,25 @@ def test_freshness_reindexes_inline(cfg, db, store, sample_repo):
     res = r.run("where is brand_new_function?", thread_id="t")
     assert any("Re-indexed 1 changed file" in n for n in res.state["notices"])
     assert any(e.get("path") == "app/fresh.py" for e in res.state["evidence"])
+
+
+def test_freshness_checks_only_repos_in_scope(cfg, db, store, sample_repo, other_repo):
+    cfg.repos["frontend"] = RepoConfig(path=str(other_repo))
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router(repos=["valuation"])],  # scope comes from the question, not -r
+            "GradeOutput": [grade()],
+            "Answer": [answer(DCF_CLAIM)],
+        },
+    )
+    (other_repo / "changed_elsewhere.md").write_text("# out of scope\n")
+    res = r.run(Q, thread_id="t")
+    fresh_entry = next(e for e in res.state["node_log"] if e.get("node") == "freshness")
+    assert fresh_entry["detail"].startswith("1 repos checked")
+    assert not any("Re-indexed" in n for n in res.state["notices"])
 
 
 def test_unindexed_repo_notice(cfg, db, store):

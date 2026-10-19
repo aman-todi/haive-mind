@@ -1,8 +1,10 @@
 """Graph assembly and the run loop (interrupt handling, metadata for rendering/eval).
 
-START -> freshness -> router -> {clarify | retrieve | parse_trace -> gather_debug | compare_sub* -> merge |
-load_profiles -> summarize_repo* -> connect_map | general} -> grade -> {answer | expand | web | rewrite |
-exhausted | to_general} ... -> answer -> verify -> {answer | finalize} -> END
+START -> router -> {clarify -> router | general | freshness -> {retrieve | parse_trace -> gather_debug |
+compare_sub* -> merge | load_profiles -> summarize_repo* -> connect_map}} -> grade -> {answer | expand |
+web | rewrite | exhausted | to_general} ... -> answer -> verify -> {answer | finalize} -> END
+
+Freshness runs after the router so it checks only the repos in scope.
 """
 
 from __future__ import annotations
@@ -28,12 +30,7 @@ Interrupt = Callable[[dict[str, Any]], Any]
 def make_freshness(deps: Deps):
     def freshness(state: GraphState, ctx: NodeCtx) -> dict[str, Any]:
         cfg = deps.cfg
-        repos, _ = (
-            cfg.resolve_names(state.get("requested_scope") or [])
-            if state.get("requested_scope")
-            else (list(cfg.repos), [])
-        )
-        rep = fresh.check(cfg, deps.db, repos)
+        rep = fresh.check(cfg, deps.db, state.get("scope_repos") or list(cfg.repos))
         notices: list[str] = []
         for rf in rep.repos:
             if rf.never_indexed:
@@ -97,7 +94,11 @@ def build_graph(deps: Deps, checkpointer: Any = None):
     add("verify", answer_mod.make_verify)
     add("finalize", finalize.make_finalize)
 
-    def after_router(state: GraphState):
+    def after_router(state: GraphState) -> str:
+        dest = router.route_after_router(state)
+        return dest if dest in ("clarify", "general") else "freshness"
+
+    def after_freshness(state: GraphState):
         dest = router.route_after_router(state)
         return fanout.compare_fanout(state) if dest == "compare_fanout" else dest
 
@@ -117,12 +118,10 @@ def build_graph(deps: Deps, checkpointer: Any = None):
             return "exhausted"  # a trace is still worth diagnosing without repo matches
         return {"web": "web_grade"}.get(dest, "to_general" if dest == "general" else dest)
 
-    g.add_edge(START, "freshness")
-    g.add_edge("freshness", "router")
+    g.add_edge(START, "router")
+    g.add_conditional_edges("router", after_router, ["clarify", "general", "freshness"])
     g.add_conditional_edges(
-        "router",
-        after_router,
-        ["clarify", "retrieve", "parse_trace", "compare_sub", "load_profiles", "general"],
+        "freshness", after_freshness, ["retrieve", "parse_trace", "compare_sub", "load_profiles"]
     )
     g.add_edge("clarify", "router")
     g.add_edge("retrieve", "grade")

@@ -215,7 +215,7 @@ headings, YAML/JSON/TOML keys, compose services, Terraform blocks, SQL statement
 Chunks are content-addressed, so re-indexing only re-embeds what changed. Commits are indexed by message,
 author, date, and changed files; code-level history comes from `git log -S/-L` at question time.
 
-Questions go through a LangGraph state machine: freshness check → router (fast model) → intent-specific
+Questions go through a LangGraph state machine: router (fast model) → freshness check of the repos in scope → intent-specific
 retrieval (code first: symbols, ripgrep, git; vectors after) → grader loop (expand, rewrite, or web) →
 answer (strong model, structured output) → verification in code → finalize. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the graph and data flow.

@@ -40,14 +40,14 @@ re-read from the live file before it reaches a prompt.
 
 ```mermaid
 flowchart TD
-  START([start]) --> F[freshness<br/>code]
-  F --> R[router<br/>fast LLM + scope validation in code]
-  R -->|unknown repo| CL[clarify<br/>interrupt]
+  START([start]) --> R[router<br/>fast LLM + scope validation in code]
+  R -->|unknown repo / vague question| CL[clarify<br/>interrupt]
   CL --> R
-  R -->|lookup / recall / history| RT[retrieve<br/>symbols, ripgrep, git, vectors]
-  R -->|debug| PT[parse_trace<br/>code] --> GD[gather_debug<br/>parallel code]
-  R -->|compare| CS[compare_sub ×N<br/>Send fan-out] --> M[merge]
-  R -->|architecture| LP[load_profiles] -->|group| SR[summarize_repo ×N<br/>fast LLM, Send] --> CMAP[connect_map<br/>code]
+  R -->|repo intents| F[freshness<br/>code, repos in scope only]
+  F -->|lookup / recall / history| RT[retrieve<br/>symbols, ripgrep, git, vectors]
+  F -->|debug| PT[parse_trace<br/>code] --> GD[gather_debug<br/>parallel code]
+  F -->|compare| CS[compare_sub ×N<br/>Send fan-out] --> M[merge]
+  F -->|architecture| LP[load_profiles] -->|group| SR[summarize_repo ×N<br/>fast LLM, Send] --> CMAP[connect_map<br/>code]
   LP -->|single repo| CMAP
   R -->|general| GEN[general] --> W
   GD -->|library failure| WG[web_grade] --> W
