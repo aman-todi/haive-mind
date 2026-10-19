@@ -31,6 +31,7 @@ Progress = Callable[..., None]
 class IndexStats:
     repo: str
     files_seen: int = 0
+    files_new: int = 0
     files_changed: int = 0
     files_deleted: int = 0
     chunks_added: int = 0
@@ -40,10 +41,15 @@ class IndexStats:
     commits_rebuilt: bool = False
     seconds: float = 0.0
 
+    @property
+    def files_touched(self) -> int:
+        return self.files_new + self.files_changed + self.files_deleted
+
     def summary(self) -> str:
         parts = [
-            f"{self.files_changed} files changed",
-            f"{self.files_deleted} deleted",
+            f"{self.files_new} new",
+            f"{self.files_changed} changed",
+            f"{self.files_deleted} deleted files",
             f"+{self.chunks_added}/-{self.chunks_deleted} chunks",
             f"+{self.commits_added}/-{self.commits_removed} commits",
         ]
@@ -103,7 +109,7 @@ class Indexer:
         self._apply(name, root, sorted(cands), files, known, stats)
 
         commit_sha = self._commits(name, root, stats, rebuild=full)
-        if stats.files_changed or stats.files_deleted or full or self.db.get_profile(name) is None:
+        if stats.files_touched or full or self.db.get_profile(name) is None:
             self.db.save_profile(name, build_profile(name, root, list(files.values())).model_dump())
         self.db.set_repo_indexed(name, git.head(root), commit_sha)
         stats.seconds = time.monotonic() - t0
@@ -121,7 +127,7 @@ class Indexer:
         if update_head:
             commit_sha = self._commits(name, root, stats)
             self.db.set_repo_indexed(name, git.head(root), commit_sha)
-        if stats.files_changed or stats.files_deleted:
+        if stats.files_touched:
             self.db.save_profile(name, build_profile(name, root, list(files.values())).model_dump())
         stats.seconds = time.monotonic() - t0
         return stats
@@ -227,7 +233,10 @@ class Indexer:
             new_ids = {c.id for c in chunks}
             to_add = [c for c in chunks if c.id not in old]
             to_del = old - new_ids
-            stats.files_changed += 1
+            if path in known:
+                stats.files_changed += 1
+            else:
+                stats.files_new += 1
             stats.chunks_added += len(to_add)
             stats.chunks_deleted += len(to_del)
             pending_chunks.extend(to_add)

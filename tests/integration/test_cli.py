@@ -85,7 +85,7 @@ def setup_repo(cli, sample_repo, *extra: str):
 def test_full_flow_is_read_only(cli, sample_repo, other_repo):
     before = snapshot(sample_repo)
     out = setup_repo(cli, sample_repo).output
-    assert "valuation:" in out and "files changed" in out
+    assert "valuation:" in out and " new, 0 changed, 0 deleted files" in out
     cli("add", str(other_repo), "--name", "frontend", "-g", "valuation-project")
     cli("index", "frontend")
 
@@ -205,8 +205,9 @@ def test_incremental_index_and_full(cli, sample_repo):
     setup_repo(cli, sample_repo)
     (sample_repo / "app" / "valuation" / "dcf.py").write_text("def choose_method(c):\n    return 'fcf'\n")
     (sample_repo / "web" / "src" / "api.ts").unlink()
+    (sample_repo / "NOTES.md").write_text("# notes\n")
     out = cli("index").output
-    assert "2 files changed" not in out and "1 files changed, 1 deleted" in out
+    assert "1 new, 1 changed, 1 deleted files" in out
     out = cli("index", "--full").output
     assert "commit history rebuilt" not in out and "+3/-0 commits" in out
 

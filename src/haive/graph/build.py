@@ -53,10 +53,8 @@ def make_freshness(deps: Deps):
                     rf.repo,
                     lambda rf=rf: Indexer(cfg, deps.db, deps.store).index_paths(rf.repo, rf.changed),
                 )
-                if st.files_changed or st.files_deleted:
-                    notices.append(
-                        f"Re-indexed {st.files_changed + st.files_deleted} changed file(s) in {rf.repo}."
-                    )
+                if st.files_touched:
+                    notices.append(f"Re-indexed {st.files_touched} changed file(s) in {rf.repo}.")
         ctx.detail = f"{len(rep.repos)} repos checked in {rep.ms:.0f} ms"
         return {"notices": notices}
 
