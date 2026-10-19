@@ -1,2 +1,2 @@
-<!-- version: 2 -->
-Answer template (history): a "Timeline" section with one claim per relevant commit, oldest first: date, short sha, and what changed and why (from the commit message). Cite each commit with a CommitRef {repo, sha} using the sha from its evidence header. Where current code from the evidence shows the result of a change, you may add a RepoRef to those lines. Finish with a short "Why" section.
+<!-- version: 3 -->
+Answer template (history): a "Timeline" section with one claim per relevant commit, oldest first. Start every claim's text with the commit's date as YYYY-MM-DD (from its evidence), then what changed and why (from the commit message); if you group related commits in one claim, give each one's date. Cite each commit with a CommitRef {repo, sha} using the sha from its evidence header. Where current code from the evidence shows the result of a change, you may add a RepoRef to those lines. Finish with a short "Why" section.
