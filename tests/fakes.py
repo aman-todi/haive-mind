@@ -131,7 +131,7 @@ def api_error(status: int) -> openai.APIStatusError:
     """A real OpenAI-client error (as the client raises after its own retries)."""
     request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     response = httpx.Response(status, request=request)
-    cls = {429: openai.RateLimitError, 400: openai.BadRequestError}.get(
+    cls = {429: openai.RateLimitError, 400: openai.BadRequestError, 404: openai.NotFoundError}.get(
         status, openai.InternalServerError if status >= 500 else openai.APIStatusError
     )
     return cls(f"HTTP {status}", response=response, body=None)

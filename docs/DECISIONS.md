@@ -178,3 +178,9 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     registered repo; pulling haive-mind cost a weatherpruf question 6 s of re-indexing. Now the router
     resolves the scope and freshness checks only those repos, as the spec intended. General questions
     skip it.
+
+37. **A model that answers 404 is skipped for the rest of the process.** The free Nemotron Super's only
+    provider went down and every call returned 404; haive retried it at each step (router, grader,
+    answer) before falling back. A 404 means the model or its sole provider is gone, not busy, so the
+    LLM layer drops it from its fallback chains for the rest of the question (or chat session). 429s
+    and 5xx stay transient and are retried as before.

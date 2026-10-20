@@ -164,3 +164,5 @@ def structured(llm: LLM, role: str, schema: type[T], messages: Any, meter: Meter
         raise StructuredError(
             f"structured output failed for {schema.__name__}: {type(e).__name__}: {e}"
         ) from e
+    finally:
+        llm.note_failures(meter)

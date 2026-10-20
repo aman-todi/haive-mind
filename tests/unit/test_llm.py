@@ -146,3 +146,17 @@ def test_meter_records_client_retries_inside_a_call():
     meter = Meter()
     LLM(Config(), None, factory_for(fake)).text("fast", "hi", meter)
     assert meter.log[-1]["failed_attempts"] == ["timeout", "HTTP 429"]
+
+
+def test_model_that_404s_is_skipped_afterwards():
+    # A removed model (or one whose only provider is down) answers 404: don't pay for it on every call.
+    m1 = FakeChatModel({"text": [api_error(404)]}, model_name="m1")
+    m2 = FakeChatModel({"text": ["ok"]}, model_name="m2")
+    llm = make({"m1": m1, "m2": m2})
+    assert llm.text("fast", "hi", Meter()) == "ok" and len(m1.calls) == 1
+    assert llm.text("fast", "hi", Meter()) == "ok" and len(m1.calls) == 1  # not tried again
+    assert llm.model_ids("fast") == ["m2"]
+    m3 = FakeChatModel({"text": [api_error(503)]}, model_name="m3")
+    busy = make({"m1": m3, "m2": m2})
+    busy.text("fast", "hi", Meter())
+    assert busy.model_ids("fast") == ["m1", "m2"]  # a 503 is transient: keep trying it

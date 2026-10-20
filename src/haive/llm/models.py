@@ -85,6 +85,9 @@ class LLM:
         self.factory = factory or (lambda mid: get_model(mid, cfg, self.rate_limiter))
         self._models: dict[str, BaseChatModel] = {}
         self._chains: dict[Any, Runnable] = {}
+        # Models that answered 404 (removed, or their only provider is down): skipped for the rest of
+        # this process, so one dead model doesn't cost an attempt at every step of every question.
+        self.unavailable: set[str] = set()
 
     # ------------------------------------------------------------ models
 
@@ -104,7 +107,10 @@ class LLM:
         for f in self.cfg.models.fallback:
             if f not in out:
                 out.append(f)
-        return out
+        return [m for m in out if m not in self.unavailable] or out
+
+    def note_failures(self, meter: Meter) -> None:
+        self.unavailable |= {e["model"] for e in meter.log if e.get("unavailable")}
 
     def with_fallbacks(
         self, role: str, build: Callable[[BaseChatModel], Runnable], key: Any = None
@@ -136,4 +142,6 @@ class LLM:
             raise
         except Exception as e:  # any provider failure degrades the caller, never crashes the graph
             raise LLMError(f"all models failed for role {role}: {type(e).__name__}: {e}") from e
+        finally:
+            self.note_failures(meter)
         return msg.content if isinstance(msg.content, str) else str(msg.content)
