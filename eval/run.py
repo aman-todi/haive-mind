@@ -227,7 +227,7 @@ def update_readme(table: str, header: str, readme: Path | None = None) -> bool:
 def main(
     suite=None,
     ablation=None,
-    model_overrides=None,
+    model=None,
     limit=None,
     console=None,
     runtime=None,
@@ -245,8 +245,8 @@ def main(
         from eval.sample import setup_sample as _setup
 
         return _setup(rt, console)
-    for role, mid in (model_overrides or {}).items():
-        setattr(rt.cfg.models, role, mid)
+    if model:
+        setattr(rt.cfg.models, rt.cfg.models.tier_name, [model])
     path = Path(suite) if suite else EVAL_DIR / "questions.yaml"
     if not path.is_absolute() and not path.exists():
         path = ROOT / path
@@ -273,7 +273,7 @@ def main(
             continue
         write_csv(out / f"{ab.replace('+', '_')}.csv", rows)
         summaries[ab] = metrics.summarize(rows)
-    models = f"fast={rt.cfg.models.fast}, strong={rt.cfg.models.strong}"
+    models = f"model={rt.cfg.models.chain()[0]}"
     header = (
         f"Measured {datetime.now():%Y-%m-%d} on `{path.name}` ({len(questions)} questions; {models}; "
         f"store={rt.cfg.vector_store.backend}; embeddings={rt.cfg.embeddings.model})."

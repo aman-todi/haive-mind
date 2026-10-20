@@ -45,15 +45,36 @@ class EmbeddingsConfig(BaseModel):
 
 
 class ModelsConfig(BaseModel):
-    fast: str = "nvidia/nemotron-3-super-120b-a12b:free"  # alt: google/gemma-4-26b-a4b-it:free
-    strong: str = "nvidia/nemotron-3-ultra-550b-a55b:free"  # alt: poolside/laguna-s-2.1:free
-    fast_paid: str = "deepseek/deepseek-v4.1-flash-1017"  # used for fast when use_paid (or --paid)
-    strong_paid: str = "deepseek/deepseek-v4-pro-0813"  # used for strong when use_paid (or --paid)
-    use_paid: bool = False
-    # Tried in order after a role's own model fails; a role skips its own model, so strong falls back to
-    # the fast model first and fast goes straight to openrouter/free.
-    fallback: list[str] = Field(
-        default_factory=lambda: ["nvidia/nemotron-3-super-120b-a12b:free", "openrouter/free"]
+    """One model answers every step of a question (router, grader, expand, answer, ...). Each tier is
+    an ordered list: the first model that works is used, the rest are fallbacks."""
+
+    tier: Literal["fast", "strong"] = "fast"  # default; --strong / --fast override per command
+    use_paid: bool = False  # default; --paid overrides per command
+    fast: list[str] = Field(
+        default_factory=lambda: [
+            "nvidia/nemotron-3-super-120b-a12b:free",
+            "minimax/minimax-m3.1-flash:free",
+            "google/gemma-4-31b-it:free",
+            "openrouter/free",
+        ]
+    )
+    strong: list[str] = Field(
+        default_factory=lambda: [
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+            "thinkingmachines/inkling:free",
+            "poolside/laguna-s-2.1:free",
+            "openrouter/free",
+        ]
+    )
+    fast_paid: list[str] = Field(
+        default_factory=lambda: [
+            "deepseek/deepseek-v4.1-flash-1017",
+            "openai/gpt-oss-120b",
+            "openrouter/auto",
+        ]
+    )
+    strong_paid: list[str] = Field(
+        default_factory=lambda: ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
     )
     base_url: str = "https://openrouter.ai/api/v1"
     provider: str = "openai"  # langchain model_provider; any OpenAI-compatible endpoint works
@@ -61,6 +82,13 @@ class ModelsConfig(BaseModel):
     requests_per_minute: int = 20  # client-side throttle (OpenRouter free models allow ~20/min)
     max_retries: int = 2  # per model, by the OpenAI client (honors Retry-After), before falling back
     timeout_seconds: int = 90  # per request; a stalled request is retried, so worst case ~3x this per model
+
+    @property
+    def tier_name(self) -> str:
+        return f"{self.tier}{'_paid' if self.use_paid else ''}"
+
+    def chain(self) -> list[str]:
+        return list(getattr(self, self.tier_name))
 
 
 class LimitsConfig(BaseModel):

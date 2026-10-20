@@ -213,6 +213,7 @@ class Runner:
         interactive: bool = True,
     ) -> RunResult:
         self.deps.thread_id = thread_id
+        self.deps.llm.begin_question()
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 60}
         t0 = time.monotonic()
         inp = turn_input(

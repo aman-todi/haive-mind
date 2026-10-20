@@ -49,7 +49,7 @@ def make_expand(deps: Deps):
         bound = None
         if use_model:
             try:
-                runnables = [deps.llm.model(mid).bind_tools(tools) for mid in deps.llm.model_ids("fast")]
+                runnables = [deps.llm.model(mid).bind_tools(tools) for mid in deps.llm.model_ids()]
                 bound = runnables[0].with_fallbacks(runnables[1:], exceptions_to_handle=RECOVERABLE)
             except NotImplementedError:
                 bound = None
@@ -76,7 +76,8 @@ def make_expand(deps: Deps):
             return {"messages": [msg]}
 
         graph = build_expand_graph(plan, tools)
-        out = graph.invoke({"messages": []}, config=deps.llm.run_config("fast", ctx.meter))
+        out = graph.invoke({"messages": []}, config=deps.llm.run_config("expand", ctx.meter))
+        deps.llm.note_failures(ctx.meter)
         evs: list[dict[str, Any]] = []
         names = []
         for m in out["messages"]:

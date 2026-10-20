@@ -184,3 +184,16 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     answer) before falling back. A 404 means the model or its sole provider is gone, not busy, so the
     LLM layer drops it from its fallback chains for the rest of the question (or chat session). 429s
     and 5xx stay transient and are retried as before.
+
+38. **One model per question, chosen by tier.** The fast/strong role split (fast model for routing and
+    grading, strong for answers) is replaced by tiers: `fast`, `strong`, `fast_paid`, `strong_paid`, each
+    an ordered list, with `tier` (default fast) and `use_paid` picking one per command (`--strong`/
+    `--fast`, `--paid`). Every step uses that list. A model that fails a call (connection error or
+    timeout, 429, 5xx after the client's retries) is skipped for the rest of the question, so steps
+    don't silently alternate between models; a 404 skips it for the process (#37). Free lists end in
+    `openrouter/free`, paid lists in `openrouter/auto`; each fallback is served by a different provider
+    than the one before it, chosen from OpenRouter's live list and provider uptime (Oct 2026). The
+    separate `fallback` list is gone. Trade-off: a fast tier answers with the fast model too; in
+    practice the free Super produced fully verified answers, and `--strong` is one flag away. `step`
+    (router, grade, answer, ...) still labels each call in --trace and the usage table. `haive eval
+    --model X` runs on X alone. Supersedes the role parts of #22, #31 and #32.

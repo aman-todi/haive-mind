@@ -85,7 +85,7 @@ class Meter(BaseCallbackHandler):
         meta = metadata or {}
         model = meta.get("ls_model_name") or (serialized or {}).get("kwargs", {}).get("model_name") or "?"
         self.calls += 1
-        self._runs[run_id] = (time.monotonic(), meta.get("haive_role", "?"), str(model))
+        self._runs[run_id] = (time.monotonic(), meta.get("haive_step", "?"), str(model))
         self._attempt_mark[run_id] = len(_attempts.events)
 
     def _finish(self, run_id: UUID, ok: bool, usage: dict[str, Any] | None = None, error: str = "") -> None:
@@ -120,7 +120,11 @@ class Meter(BaseCallbackHandler):
     def on_llm_error(self, error: BaseException, *, run_id: UUID, **kw: Any) -> None:
         self._finish(run_id, False, error=f"{type(error).__name__}: {error}")
         if isinstance(error, openai.NotFoundError):  # model or its only provider is gone, not busy
-            self.log[-1]["unavailable"] = True
+            self.log[-1]["skip"] = "process"
+        elif isinstance(
+            error, (openai.APIConnectionError, openai.RateLimitError, openai.InternalServerError)
+        ):
+            self.log[-1]["skip"] = "question"  # timeouts included; a 400 (e.g. no tool support) is not
 
     # Tool runs (the expand agent's ToolNode) show up in --trace too; they cost no LLM calls.
     def on_tool_start(self, serialized: dict[str, Any], input_str: str, *, run_id: UUID, **kw: Any) -> None:

@@ -74,7 +74,10 @@ def make_rate_limiter(requests_per_minute: int) -> InMemoryRateLimiter | None:
 
 
 class LLM:
-    """Entry point for all LLM calls. ``factory`` builds a model from an id (tests inject fakes)."""
+    """Entry point for all LLM calls. ``factory`` builds a model from an id (tests inject fakes).
+
+    Every call in a question uses the same chain: the configured tier's list (fast or strong, free or
+    paid). ``step`` (router, grade, answer, ...) only labels the call in --trace and usage stats."""
 
     def __init__(
         self, cfg: Config, db: DB | None = None, factory: Callable[[str], BaseChatModel] | None = None
@@ -88,6 +91,9 @@ class LLM:
         # Models that answered 404 (removed, or their only provider is down): skipped for the rest of
         # this process, so one dead model doesn't cost an attempt at every step of every question.
         self.unavailable: set[str] = set()
+        # Models that failed a call this question (timeouts, rate limits, 5xx after the client's
+        # retries): skipped for the rest of it, so one model answers every step of a question.
+        self.failed: set[str] = set()
 
     # ------------------------------------------------------------ models
 
@@ -96,29 +102,25 @@ class LLM:
             self._models[model_id] = self.factory(model_id)
         return self._models[model_id]
 
-    def primary(self, role: str) -> str:
-        m = self.cfg.models
-        if m.use_paid and role in ("fast", "strong"):
-            return getattr(m, f"{role}_paid")
-        return getattr(m, role)
+    def model_ids(self) -> list[str]:
+        chain = self.cfg.models.chain()
+        return [m for m in chain if m not in self.unavailable | self.failed] or chain
 
-    def model_ids(self, role: str) -> list[str]:
-        out = [self.primary(role)]
-        for f in self.cfg.models.fallback:
-            if f not in out:
-                out.append(f)
-        return [m for m in out if m not in self.unavailable] or out
+    def begin_question(self) -> None:
+        self.failed = set()
 
     def note_failures(self, meter: Meter) -> None:
-        self.unavailable |= {e["model"] for e in meter.log if e.get("unavailable")}
+        for e in meter.log:
+            if e.get("skip") == "process":
+                self.unavailable.add(e["model"])
+            elif e.get("skip") == "question":
+                self.failed.add(e["model"])
 
-    def with_fallbacks(
-        self, role: str, build: Callable[[BaseChatModel], Runnable], key: Any = None
-    ) -> Runnable:
-        """``build(model)`` for each model in the role's chain, joined with ``.with_fallbacks()``.
-        Cached per (role, models, key) so repeated calls reuse the same runnable."""
-        ids = tuple(self.model_ids(role))
-        cache_key = (role, ids, key)
+    def with_fallbacks(self, build: Callable[[BaseChatModel], Runnable], key: Any = None) -> Runnable:
+        """``build(model)`` for each model in the chain, joined with ``.with_fallbacks()``.
+        Cached per (models, key) so repeated calls reuse the same runnable."""
+        ids = tuple(self.model_ids())
+        cache_key = (ids, key)
         if cache_key not in self._chains:
             runnables = [build(self.model(mid)) for mid in ids]
             chain = runnables[0]
@@ -127,21 +129,21 @@ class LLM:
             self._chains[cache_key] = chain
         return self._chains[cache_key]
 
-    def run_config(self, role: str, meter: Meter) -> RunnableConfig:
+    def run_config(self, step: str, meter: Meter) -> RunnableConfig:
         meter.db = self.db
-        return {"callbacks": [meter], "metadata": {"haive_role": role}, "run_name": f"haive.{role}"}
+        return {"callbacks": [meter], "metadata": {"haive_step": step}, "run_name": f"haive.{step}"}
 
     # ------------------------------------------------------------ calls
 
-    def text(self, role: str, messages: Any, meter: Meter) -> str:
+    def text(self, step: str, messages: Any, meter: Meter) -> str:
         """Plain-text completion with fallback down the chain."""
-        chain = self.with_fallbacks(role, lambda m: m, key="text")
+        chain = self.with_fallbacks(lambda m: m, key="text")
         try:
-            msg = chain.invoke(messages, config=self.run_config(role, meter))
+            msg = chain.invoke(messages, config=self.run_config(step, meter))
         except BudgetExceeded:
             raise
         except Exception as e:  # any provider failure degrades the caller, never crashes the graph
-            raise LLMError(f"all models failed for role {role}: {type(e).__name__}: {e}") from e
+            raise LLMError(f"all models failed ({step}): {type(e).__name__}: {e}") from e
         finally:
             self.note_failures(meter)
         return msg.content if isinstance(msg.content, str) else str(msg.content)

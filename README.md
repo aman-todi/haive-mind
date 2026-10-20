@@ -107,12 +107,12 @@ haive index [names...] [--full]             no names = all registered repos; inc
 haive sync                                  git pull --ff-only on every repo, then incremental index
 haive status                                vector store, models per role, today's LLM usage, index health
 
-haive ask "<question>"  [-r REPO]... [-g GROUP]... [--web off|ask|auto] [--json] [--trace] [--paid]
-haive debug [FILE|-]    [-q "extra question"] [-r/-g ...] [--web ...] [--json] [--trace] [--paid]
-haive chat              [--resume ID] [-r/-g ...] [--web ...] [--paid]
+haive ask "<question>"  [-r REPO]... [-g GROUP]... [--web off|ask|auto] [--json] [--trace] [--strong|--fast] [--paid]
+haive debug [FILE|-]    [-q "extra question"] [-r/-g ...] [--web ...] [--json] [--trace] [--strong|--fast] [--paid]
+haive chat              [--resume ID] [-r/-g ...] [--web ...] [--strong|--fast] [--paid]
 haive threads           [--limit N]
 haive threads delete <ID>
-haive eval              [--suite FILE] [--ablation NAME] [--models ROLE=MODEL ...] [--setup-sample]
+haive eval              [--suite FILE] [--ablation NAME] [--model MODEL] [--setup-sample]
 ```
 
 - `--trace` prints the path through the graph: nodes visited, tools called with timing, LLM calls by role
@@ -161,12 +161,15 @@ model = "jinaai/jina-embeddings-v2-base-code"   # 768-d, runs locally via fastem
 batch_size = 8
 
 [models]                      # OpenRouter model IDs (any OpenAI-compatible endpoint works)
-fast = "nvidia/nemotron-3-super-120b-a12b:free"    # router, grader, rewrite, expand planner, titles, summaries
-strong = "nvidia/nemotron-3-ultra-550b-a55b:free"  # answer, diagnose, synthesis
-fast_paid = "deepseek/deepseek-v4.1-flash-1017"    # used with --paid or use_paid = true
-strong_paid = "deepseek/deepseek-v4-pro-0813"      # used with --paid or use_paid = true
-use_paid = false
-fallback = ["nvidia/nemotron-3-super-120b-a12b:free", "openrouter/free"]
+tier = "fast"                 # or "strong"; per command: --strong / --fast
+use_paid = false              # per command: --paid
+# One list answers every step of a question; later entries are fallbacks, in order.
+fast = ["nvidia/nemotron-3-super-120b-a12b:free", "minimax/minimax-m3.1-flash:free",
+        "google/gemma-4-31b-it:free", "openrouter/free"]
+strong = ["nvidia/nemotron-3-ultra-550b-a55b:free", "thinkingmachines/inkling:free",
+          "poolside/laguna-s-2.1:free", "openrouter/free"]
+fast_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
+strong_paid = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
 requests_per_minute = 20      # client-side throttle
 max_retries = 2               # per model (honors Retry-After) before falling back
 timeout_seconds = 90          # per request
@@ -190,21 +193,26 @@ model, about 600 MB, downloaded once), `clones/`, and `chroma/`.
 
 ## Models
 
-haive uses two OpenRouter roles, plus a fallback chain tried when a model keeps failing:
+One model answers every step of a question (router, grader, expand planner, answer, titles). You pick
+a **tier**: fast or strong, free or paid. Each tier is an ordered list; the first model that works is
+used, and a model that fails a call (timeout, rate limit, server error) is skipped for the rest of that
+question, so a question never mixes models by accident. A model that answers 404 (removed, or its only
+provider down) is skipped for the rest of the process.
 
-| Role | Default (free) | Alternative (free) | Used for |
-|---|---|---|---|
-| fast | `nvidia/nemotron-3-super-120b-a12b:free` | `google/gemma-4-26b-a4b-it:free` | router, grader, query rewrite, expand planner, per-repo summaries, chat titles |
-| strong | `nvidia/nemotron-3-ultra-550b-a55b:free` | `poolside/laguna-s-2.1:free` | answers and debug diagnoses |
-| fast (paid, off by default) | `deepseek/deepseek-v4.1-flash-1017` ($0.15 / $0.60 per 1M tokens) | `openai/gpt-oss-120b` ($0.15 / $0.60, very high throughput) | the fast role, when you pass `--paid` or set `use_paid = true` |
-| strong (paid, off by default) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98 per 1M tokens) | `anthropic/claude-sonnet-5.5` ($2 / $10) | the strong role, with the same switch |
+| Tier | 1st | 2nd | 3rd | Last resort |
+|---|---|---|---|---|
+| fast, free (default) | `nvidia/nemotron-3-super-120b-a12b:free` | `minimax/minimax-m3.1-flash:free` | `google/gemma-4-31b-it:free` | `openrouter/free` |
+| strong, free (`--strong`) | `nvidia/nemotron-3-ultra-550b-a55b:free` | `thinkingmachines/inkling:free` | `poolside/laguna-s-2.1:free` | `openrouter/free` |
+| fast, paid (`--paid`) | `deepseek/deepseek-v4.1-flash-1017` ($0.15 / $0.60 per 1M tokens) | `openai/gpt-oss-120b` ($0.15 / $0.60) | | `openrouter/auto` |
+| strong, paid (`--paid --strong`) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98) | `z-ai/glm-5.2` ($0.62 / $2.42) | | `openrouter/auto` |
 
-Picks were checked against OpenRouter's live model list in October 2026; free models come and go, so
-check the list before relying on them and use `haive eval --models fast=… strong=…` to compare. A
-typical question makes 3 calls (router, grader, answer); with `--paid` that is roughly $0.01-0.03 a
-question, almost all of it the answer call at ~15k tokens of evidence (the fast calls are a fraction of a
-cent). Paid models also avoid the free tier's
-rate limits, and you can choose providers that don't train on prompts.
+Each fallback is served by a different provider than the model before it, so one provider's outage
+doesn't take a tier down. Picks were checked against OpenRouter's live model list and provider uptime in
+October 2026; free models come and go, so check the list before relying on them, and use
+`haive eval --model …` to compare models on your own questions. A typical question makes 3 calls
+(router, grader, answer); on the paid fast tier that is well under a cent, on paid strong roughly
+$0.01-0.03. Paid models also avoid the free tier's rate limits, and you can choose providers that don't
+train on prompts. `openrouter/auto` picks a paid model for you, so its cost per call varies.
 
 ## How it works
 
@@ -257,7 +265,7 @@ or sent anywhere, and chunks containing obvious tokens are dropped. Details: [do
 accuracy, file hit rate (expected files among verified refs), retrieval recall@10 before any LLM step,
 first-try citation validity, debug file+line accuracy (top hypothesis and any), LLM calls per question,
 and p50/p95 latency. Ablations: `vector_only`, `ripgrep_only`, `hybrid`, `hybrid+loop` (default),
-`pinecone` vs `chroma` (retrieval recall only), or `all`; `--models fast=… strong=…` sweeps models.
+`pinecone` vs `chroma` (retrieval recall only), or `all`; `--model …` runs the suite on one model with no fallbacks, to compare models.
 
 Debug cases come from **bug injection into temp copies, never your repos**: `eval/inject_bugs.py` clones a
 repo, applies realistic bugs (wrong key, off-by-one, renamed env var, missing None check, bad import, …),

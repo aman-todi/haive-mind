@@ -47,8 +47,13 @@ err = Console(stderr=True)
 RepoOpt = Annotated[list[str] | None, typer.Option("--repo", "-r", help="Limit to a repo (repeatable).")]
 GroupOpt = Annotated[list[str] | None, typer.Option("--group", "-g", help="Limit to a group (repeatable).")]
 PaidOpt = Annotated[
-    bool,
-    typer.Option("--paid", help="Use models.fast_paid and models.strong_paid instead of the free models."),
+    bool, typer.Option("--paid", help="Use the paid model list for this command (models.*_paid).")
+]
+TierOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--strong/--fast", help="Use the strong or fast model list for this command (default: models.tier)."
+    ),
 ]
 WebOpt = Annotated[
     str | None, typer.Option("--web", help="Web search: off | ask | auto (default from config).")
@@ -571,13 +576,13 @@ def status() -> None:
         console.print(f"  [red]unavailable:[/] {escape(str(e))}")
     console.print("\n[bold]Models[/]")
     m = cfg.models
-    free, paid = ("", "  (in use)") if m.use_paid else ("  (in use)", "")
     console.print(
-        f"  fast: {m.fast}{free}\n  strong: {m.strong}{free}\n"
-        f"  fast_paid: {m.fast_paid}{paid}\n  strong_paid: {m.strong_paid}{paid}\n"
-        + ("" if m.use_paid else "  paid models are off; use --paid or set use_paid = true\n")
-        + f"  fallback: {', '.join(m.fallback)}\n  endpoint: {m.base_url}"
+        f"  default: {m.tier}, {'paid' if m.use_paid else 'free'} (override per command with --strong/--fast, --paid)"
     )
+    for name in ("fast", "strong", "fast_paid", "strong_paid"):
+        mark = "  [green](in use)[/]" if name == m.tier_name else ""
+        console.print(f"  {name}: {' → '.join(getattr(m, name))}{mark}")
+    console.print(f"  endpoint: {m.base_url}")
     console.print("\n[bold]LLM usage today[/]")
     used = rt.db.calls_today()
     st = daily_status(used, cfg.limits.daily_call_budget)
@@ -585,7 +590,7 @@ def status() -> None:
     console.print(f"  [{color}]{used} / {cfg.limits.daily_call_budget} calls[/]")
     for r in rt.db.usage_today():
         console.print(
-            f"  {r['role']:>6} {r['model']}: {r['calls']} calls, {r['prompt_tokens']}+{r['completion_tokens']} "
+            f"  {r['role']:>8} {r['model']}: {r['calls']} calls, {r['prompt_tokens']}+{r['completion_tokens']} "
             f"tokens, {r['errors']} errors"
         )
     console.print("\n[bold]Index health[/]")
@@ -663,6 +668,14 @@ def _show(result: Any, as_json: bool, trace: bool) -> None:
         render_trace(console, result.state.get("node_log") or [])
 
 
+def _choose_models(rt: Any, paid: bool, strong: bool | None) -> None:
+    """Per-command overrides of the configured tier; one list then serves every step of the question."""
+    if paid:
+        rt.cfg.models.use_paid = True
+    if strong is not None:
+        rt.cfg.models.tier = "strong" if strong else "fast"
+
+
 def _one_shot(
     question: str,
     trace_text: str | None,
@@ -673,11 +686,11 @@ def _one_shot(
     force: bool,
     interactive: bool,
     paid: bool = False,
+    strong: bool | None = None,
 ) -> None:
     rt = runtime()
     _budget_gate(rt, force)
-    if paid:
-        rt.cfg.models.use_paid = True
+    _choose_models(rt, paid, strong)
     runner = rt.runner()
     tid = f"oneshot-{uuid.uuid4().hex}"
     try:
@@ -708,10 +721,11 @@ def ask(
     trace: Annotated[bool, typer.Option("--trace", help="Show the path through the graph.")] = False,
     force: Annotated[bool, typer.Option("--force", help="Ignore the daily call budget.")] = False,
     paid: PaidOpt = False,
+    strong: TierOpt = None,
 ) -> None:
     """Ask a question about your repos."""
     interactive = sys.stdin.isatty() and sys.stderr.isatty() and not as_json
-    _one_shot(question, None, _scope(repo, group), web, as_json, trace, force, interactive, paid)
+    _one_shot(question, None, _scope(repo, group), web, as_json, trace, force, interactive, paid, strong)
 
 
 @app.command()
@@ -727,6 +741,7 @@ def debug(
     trace: Annotated[bool, typer.Option("--trace")] = False,
     force: Annotated[bool, typer.Option("--force")] = False,
     paid: PaidOpt = False,
+    strong: TierOpt = None,
 ) -> None:
     """Diagnose an error trace and recommend a fix (never applied)."""
     from_stdin = file in (None, "-")
@@ -742,7 +757,7 @@ def debug(
     if not text.strip():
         fail("no trace text given")
     interactive = not from_stdin and sys.stdin.isatty() and sys.stderr.isatty() and not as_json
-    _one_shot(question, text, _scope(repo, group), web, as_json, trace, force, interactive, paid)
+    _one_shot(question, text, _scope(repo, group), web, as_json, trace, force, interactive, paid, strong)
 
 
 # ================================================================== chat
@@ -814,6 +829,7 @@ def chat(
     web: WebOpt = None,
     force: Annotated[bool, typer.Option("--force")] = False,
     paid: PaidOpt = False,
+    strong: TierOpt = None,
 ) -> None:
     """Interactive chat with saved, titled, resumable threads."""
     from haive.render import render_answer
@@ -821,8 +837,7 @@ def chat(
 
     rt = runtime()
     _budget_gate(rt, force)
-    if paid:
-        rt.cfg.models.use_paid = True
+    _choose_models(rt, paid, strong)
     runner = rt.runner(persist_thread=True)
     scope = _scope(repo, group)
     web_mode = _web_mode(web) or rt.cfg.web.mode
@@ -953,8 +968,9 @@ def eval_cmd(
             "--ablation", help="vector_only | ripgrep_only | hybrid | hybrid+loop | pinecone | chroma | all"
         ),
     ] = None,
-    models: Annotated[
-        list[str] | None, typer.Option("--models", help="ROLE=MODEL overrides (repeatable).")
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Run on this one model only (no fallbacks), to compare models."),
     ] = None,
     limit: Annotated[int | None, typer.Option("--limit", help="Only the first N questions.")] = None,
     setup_sample: Annotated[
@@ -968,18 +984,12 @@ def eval_cmd(
     sys.path.insert(0, str(root))
     from eval.run import main as eval_main
 
-    overrides = {}
-    for m in models or []:
-        role, _, mid = m.partition("=")
-        if role not in ("fast", "strong") or not mid:
-            fail(f"--models expects fast=MODEL or strong=MODEL, got {m!r}")
-        overrides[role] = mid
     t0 = time.monotonic()
     try:
         out = eval_main(
             suite=suite,
             ablation=ablation,
-            model_overrides=overrides,
+            model=model,
             limit=limit,
             console=console,
             runtime=runtime(),

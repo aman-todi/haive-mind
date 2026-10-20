@@ -93,7 +93,7 @@ def make_router(deps: Deps):
                     question=state["question"],
                 )
                 try:
-                    out = structured(deps.llm, "fast", RouterOutput, prompt, ctx.meter).model_dump()
+                    out = structured(deps.llm, "router", RouterOutput, prompt, ctx.meter).model_dump()
                 except (LLMError, BudgetExceeded) as e:
                     out = RouterOutput(intent=heuristic_intent(state["question"])).model_dump()
                     notices.append(f"Router model failed ({type(e).__name__}); used keyword routing.")

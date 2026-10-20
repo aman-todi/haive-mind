@@ -52,7 +52,7 @@ def make_grade(deps: Deps):
             evidence=render_evidence(evidence, max_chars=24_000, abbreviate=18),
         )
         try:
-            g = structured(deps.llm, "fast", GradeOutput, prompt, ctx.meter).model_dump()
+            g = structured(deps.llm, "grade", GradeOutput, prompt, ctx.meter).model_dump()
         except (LLMError, BudgetExceeded) as e:
             g = {"status": "sufficient", "missing": [], "reason": f"grader failed: {type(e).__name__}"}
         ctx.detail = f"{g['status']} {g['missing'][:3]}"
@@ -91,7 +91,7 @@ def make_rewrite(deps: Deps):
             query=state.get("rewritten_query") or state["question"],
         )
         try:
-            r = structured(deps.llm, "fast", RewriteOutput, prompt, ctx.meter)
+            r = structured(deps.llm, "rewrite", RewriteOutput, prompt, ctx.meter)
             query, idents = r.query, r.identifiers
         except (LLMError, BudgetExceeded):
             query, idents = state["question"], []

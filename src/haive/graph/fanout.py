@@ -153,7 +153,7 @@ def make_summarize_repo(deps: Deps):
         excerpts = "\n\n".join(f"{h.path}:\n{h.text[:1200]}" for h in hits) or "(none)"
         prompt = prompts.messages("summarize_repo", profile=profile_summary(prof), excerpts=excerpts)
         try:
-            s = structured(deps.llm, "fast", RepoSummary, prompt, ctx.meter)
+            s = structured(deps.llm, "summary", RepoSummary, prompt, ctx.meter)
             s.repo = repo
         except (LLMError, BudgetExceeded) as e:
             ctx.detail = f"{repo}: failed {type(e).__name__}"

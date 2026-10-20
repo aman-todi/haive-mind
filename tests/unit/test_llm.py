@@ -18,7 +18,7 @@ class Out(BaseModel):
 def cfg_for() -> Config:
     cfg = Config()
     cfg.models.requests_per_minute = 0
-    cfg.models.fast, cfg.models.fallback = "m1", ["m2"]
+    cfg.models.fast = ["m1", "m2"]
     return cfg
 
 
@@ -103,13 +103,27 @@ def test_text_and_fallback():
         make(FakeChatModel({"text": [api_error(503)]})).text("fast", "hi", Meter())
 
 
-def test_paid_switch_covers_fast_and_strong():
+def test_one_list_per_tier():
     cfg = cfg_for()
     llm = LLM(cfg, None, factory_for(FakeChatModel()))
-    assert llm.model_ids("strong")[0] == cfg.models.strong and llm.model_ids("fast")[0] == "m1"
+    assert llm.model_ids() == ["m1", "m2"]  # tier "fast", free: every step uses this list
+    cfg.models.tier = "strong"
+    assert llm.model_ids()[0] == "nvidia/nemotron-3-ultra-550b-a55b:free"
+    assert llm.model_ids()[-1] == "openrouter/free"
     cfg.models.use_paid = True
-    assert llm.model_ids("strong") == ["deepseek/deepseek-v4-pro-0813", "m2"]
-    assert llm.model_ids("fast")[0] == "deepseek/deepseek-v4.1-flash-1017"
+    assert llm.model_ids() == ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
+    cfg.models.tier = "fast"
+    assert llm.model_ids()[0] == "deepseek/deepseek-v4.1-flash-1017"
+
+
+def test_a_model_that_fails_a_call_is_skipped_for_the_rest_of_the_question():
+    m1 = FakeChatModel({"text": [api_error(503), "late"]}, model_name="m1")
+    m2 = FakeChatModel({"text": ["ok"]}, model_name="m2")
+    llm = make({"m1": m1, "m2": m2})
+    assert llm.text("router", "hi", Meter()) == "ok"
+    assert llm.text("answer", "hi", Meter()) == "ok" and len(m1.calls) == 1  # same model for later steps
+    llm.begin_question()
+    assert llm.model_ids() == ["m1", "m2"]  # a new question tries the first model again
 
 
 def test_get_model_wiring(monkeypatch):
@@ -155,8 +169,10 @@ def test_model_that_404s_is_skipped_afterwards():
     llm = make({"m1": m1, "m2": m2})
     assert llm.text("fast", "hi", Meter()) == "ok" and len(m1.calls) == 1
     assert llm.text("fast", "hi", Meter()) == "ok" and len(m1.calls) == 1  # not tried again
-    assert llm.model_ids("fast") == ["m2"]
+    llm.begin_question()
+    assert llm.model_ids() == ["m2"]  # a 404 lasts beyond the question
     m3 = FakeChatModel({"text": [api_error(503)]}, model_name="m3")
     busy = make({"m1": m3, "m2": m2})
     busy.text("fast", "hi", Meter())
-    assert busy.model_ids("fast") == ["m1", "m2"]  # a 503 is transient: keep trying it
+    busy.begin_question()
+    assert busy.model_ids() == ["m1", "m2"]  # a 503 is transient: next question tries it again

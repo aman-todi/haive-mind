@@ -94,7 +94,7 @@ def make_answer(deps: Deps):
             web=render_web(state.get("web_results") or []),
         )
         try:
-            a = structured(deps.llm, "strong", Answer, prompt, ctx.meter)
+            a = structured(deps.llm, "answer", Answer, prompt, ctx.meter)
         except (LLMError, BudgetExceeded) as e:
             ctx.detail = f"failed: {type(e).__name__}"
             a = fallback_answer(state, f"answer model failed: {type(e).__name__}")

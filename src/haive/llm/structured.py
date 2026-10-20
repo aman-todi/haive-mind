@@ -5,7 +5,7 @@
     repair   = the same, plus the parse error  (via .with_fallbacks(exception_key="error"))
     per_model = native.with_fallbacks([json.with_fallbacks([repair])])
 
-and the models are joined with ``.with_fallbacks()`` down the role's chain. Models without tool
+and the models are joined with ``.with_fallbacks()`` down the tier's chain. Models without tool
 calling skip the native step.
 """
 
@@ -152,12 +152,12 @@ def build_chain(model: BaseChatModel, schema: type[T]) -> Runnable:
     return native.with_fallbacks([json_chain], exceptions_to_handle=NATIVE_ERRORS)
 
 
-def structured(llm: LLM, role: str, schema: type[T], messages: Any, meter: Meter) -> T:
+def structured(llm: LLM, step: str, schema: type[T], messages: Any, meter: Meter) -> T:
     if isinstance(messages, str):
         messages = [HumanMessage(messages)]
-    chain = llm.with_fallbacks(role, lambda m: build_chain(m, schema), key=schema)
+    chain = llm.with_fallbacks(lambda m: build_chain(m, schema), key=schema)
     try:
-        return chain.invoke({"messages": list(messages)}, config=llm.run_config(role, meter))
+        return chain.invoke({"messages": list(messages)}, config=llm.run_config(step, meter))
     except BudgetExceeded:
         raise
     except Exception as e:  # any provider failure degrades the node, never crashes the graph
