@@ -5,11 +5,14 @@ says exactly what goes where.
 
 ## Stays on your machine
 
-- **Embeddings** are computed locally with fastembed. The model is downloaded once from Hugging Face;
-  your code is never sent there.
-- **SQLite** (`~/.local/share/haive/haive.db`) holds file hashes, chunk text, commit metadata, repo
-  profiles, chat thread metadata, and LLM usage counts. `checkpoints.db` holds chat history.
-- **Chroma** (if you choose it) stores vectors and chunk text under `~/.local/share/haive/chroma/`.
+All of this is in haive's data dir: `~/Library/Application Support/haive/` on macOS,
+`~/.local/share/haive/` on Linux, or `$HAIVE_HOME/data/` if set.
+
+- **Embeddings** are computed locally with fastembed. The model is downloaded once from Hugging Face
+  into `models/`; your code is never sent there.
+- **SQLite** (`haive.db`) holds file hashes, chunk text, commit metadata, repo profiles, chat thread
+  metadata, and LLM usage counts. `checkpoints.db` holds chat history.
+- **Chroma** (if you choose it) stores vectors and chunk text under `chroma/`.
 
 ## Leaves your machine
 
@@ -39,9 +42,12 @@ Use `haive init --backend chroma`, a local OpenAI-compatible model server for `m
   `.env.example`, `.env.sample`, `.env.template`), `*.pem`, `*.key`, `id_rsa*`/`id_dsa*`/`id_ecdsa*`/
   `id_ed25519*`, `*.p12`, `*.pfx`, `credentials*`, `secrets*`, keystores, `.npmrc`, `.pypirc`, `.netrc`.
 - **Content scan:** file chunks that contain obvious tokens are dropped: AWS keys,
-  `sk-…` style API keys, private key headers, GitHub/Slack/Google/Pinecone/Tavily tokens.
+  `sk-…` style API keys, private key headers, GitHub/Slack/Google/Pinecone/Tavily tokens. Commit
+  messages are not scanned (secrets there are rare and git hosts already flag them), so they are
+  indexed, and with Pinecone uploaded, as written.
 - `.gitignore` is always respected, so ignored files are never indexed.
-- haive's own keys live in your environment or `~/.config/haive/.env` (mode 600), never in `config.toml`.
+- haive's own keys live in your environment or the `.env` next to `config.toml` (mode 600), never in
+  `config.toml` itself.
 
 These are heuristics. Don't rely on them as your only protection for repos full of real secrets.
 

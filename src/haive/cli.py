@@ -460,6 +460,7 @@ def _load_embedding_model(rt: Any) -> None:
     import threading
 
     from haive.index.embed import FastEmbedder, cache_bytes
+    from haive.render import fmt_duration
 
     emb = rt.embedder
     if not isinstance(emb, FastEmbedder):
@@ -495,12 +496,9 @@ def _load_embedding_model(rt: Any) -> None:
     if failure:
         raise failure[0]
     size = (cache_bytes() - start) / 1e6
-    console.print(f"[green]✓[/] embedding model ready ({size:.0f} MB in {_duration(time.monotonic() - t0)})")
-
-
-def _duration(seconds: float) -> str:
-    m, s = divmod(round(seconds), 60)
-    return f"{m}m {s}s" if m else f"{s}s"
+    console.print(
+        f"[green]✓[/] embedding model ready ({size:.0f} MB in {fmt_duration(time.monotonic() - t0)})"
+    )
 
 
 def _index(rt: Any, names: list[str], full: bool) -> None:
@@ -559,7 +557,7 @@ def sync() -> None:
 
 @app.command()
 def status() -> None:
-    """Vector store, models per role, today's LLM usage, index health."""
+    """Vector store, model tiers, today's LLM usage per step, index health."""
     rt = runtime()
     cfg = rt.cfg
     console.print("[bold]Vector store[/]")
@@ -590,7 +588,7 @@ def status() -> None:
     console.print(f"  [{color}]{used} / {cfg.limits.daily_call_budget} calls[/]")
     for r in rt.db.usage_today():
         console.print(
-            f"  {r['role']:>8} {r['model']}: {r['calls']} calls, {r['prompt_tokens']}+{r['completion_tokens']} "
+            f"  {r['step']:>8} {r['model']}: {r['calls']} calls, {r['prompt_tokens']}+{r['completion_tokens']} "
             f"tokens, {r['errors']} errors"
         )
     console.print("\n[bold]Index health[/]")

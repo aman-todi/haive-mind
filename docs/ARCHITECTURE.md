@@ -27,7 +27,7 @@ flowchart LR
   DB --> G
   WT -->|ripgrep, file reads,<br/>citation checks| G
   GIT -->|blame, log -S/-L| G
-  G <-->|prompts with snippets| LLM[OpenRouter<br/>fast + strong roles]
+  G <-->|prompts with snippets| LLM[OpenRouter<br/>one model list per question]
   G <-->|optional| WEB[DuckDuckGo / Tavily]
   G --> CK[(checkpoints.db<br/>chat threads)]
 ```
@@ -40,14 +40,14 @@ re-read from the live file before it reaches a prompt.
 
 ```mermaid
 flowchart TD
-  START([start]) --> R[router<br/>fast LLM + scope validation in code]
+  START([start]) --> R[router<br/>LLM + scope validation in code]
   R -->|unknown repo / vague question| CL[clarify<br/>interrupt]
   CL --> R
   R -->|repo intents| F[freshness<br/>code, repos in scope only]
   F -->|lookup / recall / history| RT[retrieve<br/>symbols, ripgrep, git, vectors]
   F -->|debug| PT[parse_trace<br/>code] --> GD[gather_debug<br/>parallel code]
   F -->|compare| CS[compare_sub ×N<br/>Send fan-out] --> M[merge]
-  F -->|architecture| LP[load_profiles] -->|group| SR[summarize_repo ×N<br/>fast LLM, Send] --> CMAP[connect_map<br/>code]
+  F -->|architecture| LP[load_profiles] -->|group| SR[summarize_repo ×N<br/>LLM, Send] --> CMAP[connect_map<br/>code]
   LP -->|single repo| CMAP
   R -->|general| GEN[general] --> W
   GD -->|library failure| WG[web_grade] --> W
@@ -55,30 +55,35 @@ flowchart TD
   RT --> GR
   M --> GR
   CMAP --> GR
-  GR{grade<br/>fast LLM}
+  GR{grade<br/>LLM}
   GR -->|sufficient| A
   GR -->|missing_symbol / need_context| X[expand<br/>tool-calling subgraph] --> GR
   GR -->|need_external| WG
-  GR -->|nothing_relevant, first time| RW[rewrite_query<br/>fast LLM] --> RT
+  GR -->|nothing_relevant, first time| RW[rewrite<br/>LLM] -->|by intent| RT
+  RW --> CS
+  RW --> LP
   GR -->|nothing_relevant again| TG[to_general] --> W
   GR -->|loops exhausted| EX[exhausted] --> A
   W[maybe_web<br/>off / ask interrupt / auto] -->|from grade| GR
   W -->|from general| A
-  A[answer<br/>strong LLM, structured] --> V[verify<br/>code]
+  A[answer<br/>LLM, structured] --> V[verify<br/>code]
   V -->|errors, retries left| A
   V -->|ok or retries spent| FN[finalize<br/>code] --> END([end])
 ```
 
+- **Models**: one tier's list (fast or strong, free or paid) serves every LLM call in a question; later
+  entries are fallbacks. A model that fails a call is skipped for the rest of the question, and one that
+  answers 404 for the rest of the process (`llm/models.py`).
 - **Budget guard**: every LLM-calling node gets a meter capped at the calls left for the question.
   Grade, rewrite, and summaries hold one call back for the answer; with no calls left, `answer` builds an
   evidence-only answer in code.
 - **Interrupts** (clarify, web approval) need a checkpointer. `ask`/`debug` use a throwaway thread in the
   same SQLite saver and delete it afterwards. Without a terminal, interrupts resolve to defaults
-  (scope = all, web declined) and a notice says so.
+  (scope = all, a vague question answered as asked, web declined) and a notice says so.
 - **Chat** reuses the thread's `messages`, so the router sees recent turns and follow-ups like "and in
   the other repo?" resolve. Per-turn accumulators (evidence, notices, call counts) reset on each turn via
   reducers that treat `None` as "reset".
-- **Expand** is a nested LangGraph: `plan` (the fast model with five `@tool`s bound: `find_definition`,
+- **Expand** is a nested LangGraph: `plan` (the model with five `@tool`s bound: `find_definition`,
   `find_usages`, `read_file`, `search_code`, `recent_commits`) → `tools_condition` → prebuilt `ToolNode`,
   which runs the chosen calls in parallel. Each tool returns `(content, artifact)`; the artifacts are
   evidence dicts. When the model can't call tools, fails, or the budget can't cover a planning call,

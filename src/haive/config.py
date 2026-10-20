@@ -96,7 +96,7 @@ class LimitsConfig(BaseModel):
     max_grade_loops: int = 2
     max_answer_retries: int = 2
     daily_call_budget: int = 1000
-    expand_with_tools: bool = True  # let the fast model pick expand tools (else deterministic heuristics)
+    expand_with_tools: bool = True  # let the model pick expand tools (else deterministic heuristics)
 
 
 class WebConfig(BaseModel):
@@ -202,7 +202,7 @@ def save_config(cfg: Config, path: Path | None = None) -> Path:
 
 
 def load_secrets() -> None:
-    """Load ~/.config/haive/.env into the environment (existing env vars win)."""
+    """Load the .env next to config.toml into the environment (existing env vars win)."""
     from dotenv import load_dotenv
 
     env = paths.env_file()

@@ -53,10 +53,6 @@ class FakeChatModel(BaseChatModel):
         super().__init__(script={k: list(v) for k, v in (script or {}).items()}, **kw)
 
     @property
-    def messages(self) -> list[list[BaseMessage]]:
-        return self.seen
-
-    @property
     def _llm_type(self) -> str:
         return "fake-chat"
 
@@ -70,7 +66,7 @@ class FakeChatModel(BaseChatModel):
         return self.bind(tools=[convert_to_openai_tool(t) for t in tools], tool_choice=tool_choice, **kw)
 
     def _next(self, key: str, messages: list[BaseMessage]) -> Any:
-        queue = self.script.get(key) or self.script.get("*")
+        queue = self.script.get(key)
         if not queue:
             raise AssertionError(f"FakeChatModel has no script for {key!r}")
         item = queue.pop(0) if len(queue) > 1 else queue[0]

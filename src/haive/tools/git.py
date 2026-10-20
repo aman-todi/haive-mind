@@ -112,26 +112,12 @@ def status_paths(root: Path | str) -> list[str]:
     return paths_
 
 
-def status_porcelain(root: Path | str) -> str:
-    return _git(root, "status", "--porcelain", "--untracked-files=all")
-
-
 def is_ancestor(root: Path | str, ancestor: str, rev: str = "HEAD") -> bool:
     try:
         base = _git(root, "merge-base", ancestor, rev).strip()
     except GitError:
         return False
     return base == _git(root, "rev-parse", ancestor).strip()
-
-
-def rev_list(root: Path | str, spec: str, max_count: int | None = None) -> list[str]:
-    args = ["rev-list", spec]
-    if max_count:
-        args.insert(1, f"--max-count={max_count}")
-    try:
-        return [s for s in _git(root, *args).split() if s]
-    except GitError:
-        return []
 
 
 @dataclass

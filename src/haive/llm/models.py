@@ -1,9 +1,9 @@
-"""Role-based chat models via OpenRouter (or any OpenAI-compatible endpoint).
+"""Chat models via OpenRouter (or any OpenAI-compatible endpoint): one tier's model list per question.
 
 Built on LangChain primitives:
 - ``init_chat_model`` builds each model, with a shared ``InMemoryRateLimiter`` (client-side
   throttle) and the OpenAI client's own retries, which honor ``Retry-After`` on 429s;
-- ``.with_fallbacks()`` moves down the fallback chain when a model keeps failing;
+- ``.with_fallbacks()`` moves down the tier's list when a model keeps failing;
 - the ``Meter`` callback handler counts calls, enforces the per-question budget, and records usage.
 """
 

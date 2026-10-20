@@ -77,7 +77,8 @@ These need you, not the tool:
 6. **Register repos** and define groups (below).
 7. **First full index**: run it and report anything wrong (missed files, bad chunks, slowness).
 
-Keys can be exported in your shell or put in `~/.config/haive/.env` (created by `haive init`, mode 600).
+Keys can be exported in your shell or put in the `.env` next to `config.toml` (created by `haive init`,
+mode 600; see Configuration for where that is).
 They are never written to `config.toml`.
 
 ## Quickstart
@@ -105,17 +106,18 @@ haive repos                                 path, last indexed, chunk/commit cou
 haive groups                                groups and their repos (edit groups in config.toml)
 haive index [names...] [--full]             no names = all registered repos; incremental unless --full
 haive sync                                  git pull --ff-only on every repo, then incremental index
-haive status                                vector store, models per role, today's LLM usage, index health
+haive status                                vector store, model tiers, today's LLM usage, index health
 
 haive ask "<question>"  [-r REPO]... [-g GROUP]... [--web off|ask|auto] [--json] [--trace] [--strong|--fast] [--paid]
 haive debug [FILE|-]    [-q "extra question"] [-r/-g ...] [--web ...] [--json] [--trace] [--strong|--fast] [--paid]
 haive chat              [--resume ID] [-r/-g ...] [--web ...] [--strong|--fast] [--paid]
 haive threads           [--limit N]
 haive threads delete <ID>
-haive eval              [--suite FILE] [--ablation NAME] [--model MODEL] [--setup-sample]
+haive eval              [--suite FILE] [--ablation NAME] [--model MODEL] [--limit N] [--setup-sample]
 ```
 
-- `--trace` prints the path through the graph: nodes visited, tools called with timing, LLM calls by role
+- Every answer starts with its response time (time spent at clarify or web prompts is not counted).
+- `--trace` prints the path through the graph: nodes visited, tools called with timing, LLM calls by step
   and model.
 - `--json` prints the structured answer plus metadata (intent, scope, LLM calls, latency, notices).
 - In `chat`: `/scope <repos or groups|all>`, `/web off|ask|auto`, `/new`, `/threads`, `/exit`. Pasting a
@@ -138,7 +140,8 @@ questions at 100% unless `--force`.
 
 ## Configuration
 
-`~/.config/haive/config.toml` (or `$HAIVE_HOME/config/config.toml`):
+`config.toml` (with `.env` beside it) lives in `~/.config/haive/` on Linux and
+`~/Library/Application Support/haive/` on macOS, or in `$HAIVE_HOME/config/` if set:
 
 ```toml
 [repos.valuation-backend]
@@ -180,14 +183,15 @@ max_llm_calls_per_question = 25
 max_grade_loops = 2
 max_answer_retries = 2
 daily_call_budget = 1000
-expand_with_tools = true      # the fast model picks expand tools; false = deterministic heuristics
+expand_with_tools = true      # the model picks expand tools; false = deterministic heuristics
 
 [web]
 mode = "ask"                  # off | ask | auto
 provider = "auto"             # tavily if TAVILY_API_KEY is set, else duckduckgo
 ```
 
-Data lives in `~/.local/share/haive/` on Linux and `~/Library/Application Support/haive/` on macOS:
+Data lives in `~/.local/share/haive/` on Linux and `~/Library/Application Support/haive/` on macOS
+(`$HAIVE_HOME/data/` if set):
 `haive.db` (the index, not a copy of your code), `checkpoints.db` (chat state), `models/` (the embedding
 model, about 600 MB, downloaded once), `clones/`, and `chroma/`.
 
@@ -223,16 +227,17 @@ headings, YAML/JSON/TOML keys, compose services, Terraform blocks, SQL statement
 Chunks are content-addressed, so re-indexing only re-embeds what changed. Commits are indexed by message,
 author, date, and changed files; code-level history comes from `git log -S/-L` at question time.
 
-Questions go through a LangGraph state machine: router (fast model) → freshness check of the repos in scope → intent-specific
-retrieval (code first: symbols, ripgrep, git; vectors after) → grader loop (expand, rewrite, or web) →
-answer (strong model, structured output) → verification in code → finalize. See
+Questions go through a LangGraph state machine: router → freshness check of the repos in scope →
+intent-specific retrieval (code first: symbols, ripgrep, git; vectors after) → grader loop (expand,
+rewrite, or web) → answer (structured output) → verification in code → finalize. One model list (the
+tier) serves every step. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the graph and data flow.
 
 **LangGraph** runs the whole flow: a `StateGraph` with conditional edges, `Send` fan-out for compare and
 architecture, `interrupt`/`Command` for clarification and web approval, a `SqliteSaver` checkpointer for
 resumable chats, and a tool-calling subgraph (`ToolNode` + `tools_condition`) for the expand step.
 **LangChain** provides the pieces around it: `init_chat_model` with an `InMemoryRateLimiter`,
-`.with_fallbacks()` across models, LCEL structured-output chains (native tool calling, then
+`.with_fallbacks()` down each tier's model list, LCEL structured-output chains (native tool calling, then
 `PydanticOutputParser` with an error-fed repair retry), `ChatPromptTemplate`s with a `MessagesPlaceholder`
 for chat history, a callback handler that meters calls and records usage, `@tool`s over the code tools,
 `Embeddings` over fastembed, and the `langchain-pinecone` / `langchain-chroma` vector stores.
@@ -242,7 +247,8 @@ for chat history, a callback handler that meters calls and records usage, `@tool
 Your code is embedded locally. Snippets relevant to each question are sent to the LLM provider you
 configure (OpenRouter by default), and, with Pinecone, chunk text is stored in your Pinecone index as
 metadata. Use Chroma for fully local storage. Secret files (`.env*`, keys, credentials) are never indexed
-or sent anywhere, and chunks containing obvious tokens are dropped. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
+or sent anywhere, and file chunks containing obvious tokens are dropped. Commit messages are indexed
+without a token scan. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Limitations
 
@@ -274,7 +280,7 @@ runs the entrypoint to capture a real error, and records the expected file, line
 ```bash
 haive eval --setup-sample            # bundled sample repo + 7 injected bugs (Python, Go, Java)
 haive index eval-sample eval-sample-bugs
-haive eval --suite ~/.local/share/haive/eval/questions.sample.yaml --ablation all
+haive eval --suite "<data dir>/eval/questions.sample.yaml" --ablation all   # path printed by --setup-sample
 ```
 
 Your own suite goes in `eval/questions.yaml` (about 30 questions, 4–5 per intent, drafted from your

@@ -1,4 +1,4 @@
-"""Answer (strong LLM, intent template, structured output) and the verify node around verify.py."""
+"""Answer (LLM, intent template, structured output) and the verify node around verify.py."""
 
 from __future__ import annotations
 

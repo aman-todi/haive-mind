@@ -52,7 +52,7 @@ def test_git_helpers(sample_repo):
     bl = git.blame(sample_repo, "app/api/client.py", 1, 3)
     assert len(bl) == 3 and bl[0].author == "Dev" and bl[0].time > 0
     head = git.head(sample_repo)
-    assert git.rev_list(sample_repo, "HEAD") and git.is_ancestor(sample_repo, "HEAD~1", head)
+    assert git.is_ancestor(sample_repo, "HEAD~1", head)
     assert git.changed_since(sample_repo, "HEAD") == []
 
 

@@ -97,7 +97,7 @@ def test_render_and_json():
         con2,
         [
             {"type": "node", "node": "router", "ms": 5},
-            {"type": "llm", "role": "fast", "model": "m", "ok": True, "ms": 9},
+            {"type": "llm", "step": "answer", "model": "m", "ok": True, "ms": 9},
         ],
     )
     assert "router" in con2.export_text()

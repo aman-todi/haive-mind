@@ -34,17 +34,34 @@ def test_resolve_names_fuzzy_and_groups():
 
 def test_db_migrations_idempotent(tmp_path):
     d = DB(tmp_path / "h.db")
-    assert d.version == 1
+    assert d.version == 2
     d.close()
     d2 = DB(tmp_path / "h.db")
-    assert d2.version == 1
+    assert d2.version == 2
 
 
 def test_usage_accounting(db):
-    db.record_usage("fast", "m1", 10, 5)
-    db.record_usage("fast", "m1", 10, 5, error=True)
-    db.record_usage("strong", "m2")
+    db.record_usage("router", "m1", 10, 5)
+    db.record_usage("router", "m1", 10, 5, error=True)
+    db.record_usage("answer", "m2")
     assert db.calls_today() == 3
-    rows = {(r["role"], r["model"]): r for r in db.usage_today()}
-    assert rows[("fast", "m1")]["prompt_tokens"] == 20
-    assert rows[("fast", "m1")]["errors"] == 1
+    rows = {(r["step"], r["model"]): r for r in db.usage_today()}
+    assert rows[("router", "m1")]["prompt_tokens"] == 20
+    assert rows[("router", "m1")]["errors"] == 1
+
+
+def test_v1_usage_table_migrates_role_to_step(tmp_path):
+    import sqlite3
+
+    from haive.db import MIGRATIONS
+
+    path = tmp_path / "old.db"
+    c = sqlite3.connect(path)
+    c.execute("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at REAL)")
+    c.executescript(MIGRATIONS[0])
+    c.execute("INSERT INTO schema_migrations VALUES(1, 0)")
+    c.execute("INSERT INTO usage VALUES(date('now'), 'fast', 'm', 4, 1, 1, 0)")
+    c.commit()
+    c.close()
+    db = DB(path)
+    assert db.version == 2 and db.usage_today()[0]["step"] == "fast" and db.calls_today() == 4

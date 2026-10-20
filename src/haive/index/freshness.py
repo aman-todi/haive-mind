@@ -1,4 +1,4 @@
-"""Freshness check before every question (repos in scope only, ~200 ms budget).
+"""Freshness check for the repos in a question's scope, run right after the router (~200 ms budget).
 
 Compares the live tree against the last indexed HEAD and stored file hashes. Up to
 ``INLINE_LIMIT`` changed files are re-indexed inline; more than that produces a warning.

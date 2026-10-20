@@ -108,7 +108,7 @@ class Indexer:
         self.progress("start", repo=name, total=len(cands))
         self._apply(name, root, sorted(cands), files, known, stats)
 
-        commit_sha = self._commits(name, root, stats, rebuild=full)
+        commit_sha = self._commits(name, root, stats)
         if stats.files_touched or full or self.db.get_profile(name) is None:
             self.db.save_profile(name, build_profile(name, root, list(files.values())).model_dump())
         self.db.set_repo_indexed(name, git.head(root), commit_sha)
@@ -153,7 +153,7 @@ class Indexer:
                 "UPDATE repos SET last_commit_sha=NULL, last_indexed_head=NULL WHERE name=?", (name,)
             )
 
-    def _commits(self, name: str, root: Path, stats: IndexStats, rebuild: bool = False) -> str | None:
+    def _commits(self, name: str, root: Path, stats: IndexStats) -> str | None:
         ic = self.cfg.index
         cs = commit_index.index_commits(self.db, self.store, name, root, ic.max_commits)
         stats.commits_added += cs.added

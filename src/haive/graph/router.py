@@ -1,4 +1,5 @@
-"""Router: intent classification (fast LLM, structured) plus scope validation in code."""
+"""Router: intent, scope, identifiers, follow-up rewriting, and clarify-or-assume for vague questions
+(one structured LLM call), with scope validated in code. ``clarify`` is the interrupt node it routes to."""
 
 from __future__ import annotations
 

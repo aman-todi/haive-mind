@@ -1,4 +1,4 @@
-"""Grade (fast LLM): is the evidence enough? Also rewrite_query for the nothing-relevant path."""
+"""Grade (LLM): is the evidence enough? Also rewrite_query for the nothing-relevant path."""
 
 from __future__ import annotations
 

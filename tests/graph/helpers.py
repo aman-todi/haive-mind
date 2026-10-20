@@ -51,7 +51,6 @@ def make_runner(
     *,
     web: list[WebResult] | None = None,
     index: bool = True,
-    persist: bool = False,
     ablation: str = "hybrid+loop",
     supports_tools: bool = False,
 ) -> tuple[Runner, FakeChatModel]:
@@ -73,7 +72,6 @@ def make_runner(
         llm=llm,
         store_factory=lambda: store,
         web_search=web_search,
-        persist_thread=persist,
         ablation=ablation,
     )
     deps.extra["web_calls"] = calls

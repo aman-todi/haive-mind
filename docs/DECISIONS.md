@@ -197,3 +197,13 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     practice the free Super produced fully verified answers, and `--strong` is one flag away. `step`
     (router, grade, answer, ...) still labels each call in --trace and the usage table. `haive eval
     --model X` runs on X alone. Supersedes the role parts of #22, #31 and #32.
+
+39. **Cleanup after the tier change.** Removed code the design no longer uses: `git.status_porcelain`,
+    `git.rev_list`, the `ChatModel` protocol, the `turn` and `summaries` state fields, and unused
+    parameters (`_commits(rebuild=)`, `is_external(function=)`, `_newest(deps)`). One duration
+    formatter instead of two. "Role" is now "step" everywhere it labels an LLM call, including the
+    usage table (`haive.db` migration v2 renames the column in place, so no re-index). Docs and
+    comments no longer describe fast/strong roles, Linux-only paths, or freshness running first;
+    PROGRESS.md is a short current status. Cross-references for earlier entries: #27 revises #9 (commit
+    chunks are now citable via `CommitRef`), and #37's "rest of the question" became "rest of the
+    process" for 404s in #38.

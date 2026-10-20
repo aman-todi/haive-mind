@@ -78,7 +78,6 @@ class GraphState(TypedDict, total=False):
     web_done: bool
     web_return: str
     debug_web_query: str | None
-    summaries: Annotated[list[dict[str, Any]], add_or_reset]
     grade: dict[str, Any] | None
     loops: int
     low_confidence: bool
@@ -92,7 +91,6 @@ class GraphState(TypedDict, total=False):
     title: str | None
     notices: Annotated[list[str], add_or_reset]
     node_log: Annotated[list[dict[str, Any]], add_or_reset]
-    turn: int
 
 
 def turn_input(
@@ -123,7 +121,6 @@ def turn_input(
         "web_done": False,
         "web_return": "answer",
         "debug_web_query": None,
-        "summaries": None,
         "grade": None,
         "loops": 0,
         "low_confidence": False,

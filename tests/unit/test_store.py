@@ -98,32 +98,3 @@ def test_pinecone_requires_key(embedder, monkeypatch):
     monkeypatch.delenv("PINECONE_API_KEY", raising=False)
     with pytest.raises(PineconeError):
         PineconeStore(embedder)
-
-
-def test_embedding_model_cache_lives_in_data_dir(monkeypatch, haive_home):
-    import logging
-    import sys
-    import types
-
-    from haive.index.embed import FastEmbedder, model_cache_dir
-
-    seen = {}
-
-    class FakeTextEmbedding:
-        def __init__(self, model_name, cache_dir=None):
-            seen["cache_dir"] = cache_dir
-
-    monkeypatch.setitem(sys.modules, "fastembed", types.SimpleNamespace(TextEmbedding=FakeTextEmbedding))
-    monkeypatch.delenv("FASTEMBED_CACHE_PATH", raising=False)
-    FastEmbedder().model  # noqa: B018 - property builds the model
-    assert seen["cache_dir"] == str(haive_home / "data" / "models") == model_cache_dir()
-    monkeypatch.setenv("FASTEMBED_CACHE_PATH", "/custom/cache")
-    assert model_cache_dir() == "/custom/cache"
-
-    hub = logging.getLogger("huggingface_hub.utils._http")
-    hidden = logging.LogRecord(
-        "x", logging.WARNING, "", 0, "You are sending unauthenticated requests to the HF Hub.", None, None
-    )
-    shown = logging.LogRecord("x", logging.WARNING, "", 0, "Some other hub warning", None, None)
-    assert not all(f.filter(hidden) for f in hub.filters)
-    assert all(f.filter(shown) for f in hub.filters)

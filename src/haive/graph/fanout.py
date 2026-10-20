@@ -163,10 +163,10 @@ def make_summarize_repo(deps: Deps):
             f"interfaces: {', '.join(s.interfaces)}\ndeploy: {s.deploy}"
         )
         ev = Evidence(
-            id=f"summary:{repo}", source="tool", repo=repo, text=text, why="per-repo summary (fast model)"
+            id=f"summary:{repo}", source="tool", repo=repo, text=text, why="per-repo summary (model)"
         )
         ctx.detail = repo
-        return {"summaries": [s.model_dump()], "evidence": [ev.model_dump()]}
+        return {"evidence": [ev.model_dump()]}
 
     return summarize_repo
 

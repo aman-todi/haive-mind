@@ -110,7 +110,7 @@ def render_trace(console: Console, node_log: list[dict[str, Any]]) -> None:
             ok = "" if e.get("ok") else f" [red]{escape(e.get('error', 'error'))}[/]"
             if e.get("failed_attempts"):
                 ok += f" [yellow](after failed attempts: {escape(', '.join(e['failed_attempts']))})[/]"
-            step, detail = "  llm", f"{e['role']} → {escape(e['model'])}{ok}"
+            step, detail = "  llm", f"{e['step']} → {escape(e['model'])}{ok}"
         else:
             step, detail = f"  {kind}", escape(e.get("name", "") + " " + e.get("detail", ""))
         t.add_row(str(i), step, detail, str(e.get("ms", "")))

@@ -86,7 +86,7 @@ def test_metrics_units():
 
 
 def answer_citing_expected(messages):
-    """Fake strong model: cite the first evidence header in the prompt (a real file + range)."""
+    """Fake model: cite the first evidence header in the prompt (a real file + range)."""
     import re
 
     text = messages[0].content if hasattr(messages[0], "content") else str(messages)

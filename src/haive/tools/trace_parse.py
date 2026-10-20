@@ -26,7 +26,7 @@ FILE_EXT = (r"(?:py|pyi|js|mjs|cjs|jsx|ts|mts|cts|tsx|go|rs|java|kt|kts|scala|c|
             r"swift|ex|exs|dart|lua|sql|sh|vue|svelte|yaml|yml|json|toml|tf)")  # fmt: skip
 
 
-def is_external(path: str, function: str = "") -> bool:
+def is_external(path: str) -> bool:
     p = path.replace("\\", "/")
     if any(m in p for m in EXTERNAL_MARKERS):
         return True
@@ -46,7 +46,7 @@ def _frame(
         line=int(line) if line not in (None, "") else None,
         col=int(col) if col not in (None, "") else None,
         function=(function or "").strip(),
-        external=kw.pop("external", None) if "external" in kw else is_external(path, function),
+        external=kw.pop("external", None) if "external" in kw else is_external(path),
     )
 
 

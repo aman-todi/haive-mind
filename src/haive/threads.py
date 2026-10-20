@@ -56,7 +56,7 @@ def delete(db: DB, thread_id: str, checkpointer: Any = None) -> None:
 
 
 def make_title(llm: LLM, question: str, meter: Meter) -> str:
-    """At most 8 words from the fast model; falls back to the first 60 characters of the question."""
+    """At most 8 words from the model; falls back to the first 60 characters of the question."""
     fallback = " ".join(question.split())[:60]
     try:
         text = llm.text("title", prompts.messages("title", question=question[:1000]), meter)

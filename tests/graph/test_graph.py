@@ -48,9 +48,7 @@ def test_verify_retry_then_success(cfg, db, store):
     )
     res = r.run(Q, thread_id="t")
     assert nodes(res).count("answer") == 2 and res.state["answer_retries"] == 1
-    assert "line range invalid" in fake.messages[-1][-2].content or "line range invalid" in str(
-        fake.messages[-1]
-    )
+    assert "line range invalid" in fake.seen[-1][-2].content or "line range invalid" in str(fake.seen[-1])
     assert not any(c.unverified for c in res.answer.all_claims())
     assert res.meta()["first_verify"] == {"repo_claims": 1, "repo_claims_ok": 0}
 
@@ -446,7 +444,7 @@ def test_recent_changes_cite_commits(cfg, db, store):
     whys = [e["why"] for e in res.state["evidence"]]
     assert whys[0] == "history window" and not any("git log -S" in w for w in whys)
     assert any(n.startswith("History window: the newest") for n in res.state["notices"])
-    assert f"sha={head[:12]}" in str(fake.messages[-1])  # commit shas are in the evidence headers
+    assert f"sha={head[:12]}" in str(fake.seen[-1])  # commit shas are in the evidence headers
     good_claim, bad_claim = res.answer.sections[0].claims
     assert not good_claim.unverified and bad_claim.unverified
     assert "commit was not among the retrieved evidence" in " ".join(res.state["verify_errors"])
@@ -465,7 +463,7 @@ def test_empty_answer_is_retried(cfg, db, store):
     )
     res = r.run(Q, thread_id="t")
     assert nodes(res).count("answer") == 2
-    assert "the answer has no claims" in str(fake.messages[-1])
+    assert "the answer has no claims" in str(fake.seen[-1])
     assert not any(c.unverified for c in res.answer.all_claims()) and len(res.answer.all_claims()) == 1
 
 
@@ -546,7 +544,7 @@ def test_debug_python_trace(cfg, db, store):
     assert res.answer.suggested_fix.approximate is False
     assert res.answer.hypotheses[0].confidence == "high"
     assert not any(c.unverified for c in res.answer.all_claims())
-    assert "Parsed error" in fake.messages[-1][0].content
+    assert "Parsed error" in fake.seen[-1][0].content
 
 
 def test_debug_external_failure_searches_web(cfg, db, store):
@@ -738,7 +736,7 @@ def test_expand_with_model_planned_tool_calls(cfg, db, store):
         "Answer": [answer(DCF_CLAIM)],
     }, supports_tools=True)  # fmt: skip
     res = r.run("How does create_valuation work?", thread_id="t")
-    assert "tools" in fake.calls  # one planning call by the fast model
+    assert "tools" in fake.calls  # one planning call by the model
     expand = next(e for e in res.state["node_log"] if e.get("node") == "expand")
     assert expand["detail"].startswith("model plan: ['find_definition', 'recent_commits']")
     whys = [e["why"] for e in res.state["evidence"]]

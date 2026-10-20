@@ -217,7 +217,7 @@ def test_budget_gate_and_missing_key(cli, sample_repo, monkeypatch):
     cfg = load_config()
     cfg.limits.daily_call_budget = 1
     save_config(cfg)
-    Runtime().db.record_usage("fast", "m")
+    Runtime().db.record_usage("router", "m")
     res = cli("ask", "anything", ok=False)
     assert res.exit_code == 1 and "daily LLM call budget" in res.output
     cli("ask", "anything", "--force", "--json")

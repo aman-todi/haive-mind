@@ -1,7 +1,7 @@
 """Expand: fetch what the grader said was missing (definitions, callers, files, config, commits).
 
 A small LangGraph subgraph: ``plan`` -> ``tools_condition`` -> prebuilt ``ToolNode``. The plan
-comes from the fast model with the tools bound (it picks the calls, in parallel), or, when the
+comes from the model with the tools bound (it picks the calls, in parallel), or, when the
 model can't call tools or the budget is tight, from deterministic heuristics. Either way the same
 ``ToolNode`` executes the calls and their artifacts become evidence.
 """

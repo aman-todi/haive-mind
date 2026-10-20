@@ -39,6 +39,8 @@ MIGRATIONS: list[str] = [
         date TEXT, role TEXT, model TEXT, calls INTEGER DEFAULT 0, prompt_tokens INTEGER DEFAULT 0,
         completion_tokens INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, PRIMARY KEY(date, role, model));
     """,
+    # v2: usage is counted per step (router, grade, answer, ...) since one model list serves a question
+    "ALTER TABLE usage RENAME COLUMN role TO step;",
 ]
 
 
@@ -157,13 +159,13 @@ class DB:
     # ------------------------------------------------------------ usage
 
     def record_usage(
-        self, role: str, model: str, prompt_tokens: int = 0, completion_tokens: int = 0, error: bool = False
+        self, step: str, model: str, prompt_tokens: int = 0, completion_tokens: int = 0, error: bool = False
     ) -> None:
         self.x(
-            "INSERT INTO usage VALUES(?,?,?,1,?,?,?) ON CONFLICT(date, role, model) DO UPDATE SET "
+            "INSERT INTO usage VALUES(?,?,?,1,?,?,?) ON CONFLICT(date, step, model) DO UPDATE SET "
             "calls=calls+1, prompt_tokens=prompt_tokens+excluded.prompt_tokens, "
             "completion_tokens=completion_tokens+excluded.completion_tokens, errors=errors+excluded.errors",
-            (date.today().isoformat(), role, model, prompt_tokens, completion_tokens, int(error)),
+            (date.today().isoformat(), step, model, prompt_tokens, completion_tokens, int(error)),
         )
 
     def calls_today(self) -> int:
@@ -171,4 +173,4 @@ class DB:
         return row[0]["n"]
 
     def usage_today(self) -> list[sqlite3.Row]:
-        return self.q("SELECT * FROM usage WHERE date=? ORDER BY role, model", (date.today().isoformat(),))
+        return self.q("SELECT * FROM usage WHERE date=? ORDER BY step, model", (date.today().isoformat(),))

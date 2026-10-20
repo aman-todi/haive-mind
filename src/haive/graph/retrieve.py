@@ -169,9 +169,7 @@ def _commit_ev(repo: str, c: dict[str, Any], why: str) -> dict[str, Any]:
     ).model_dump()
 
 
-def _newest(
-    deps: Deps, ctx: NodeCtx, roots: dict[str, Any], n: int, since: str | None
-) -> list[tuple[str, dict]]:
+def _newest(ctx: NodeCtx, roots: dict[str, Any], n: int, since: str | None) -> list[tuple[str, dict]]:
     """The newest ``n`` commits across ``roots`` (optionally since a date), newest first."""
     found = [
         (utc_iso(c["date"]), repo, c)
@@ -196,13 +194,13 @@ def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> li
         # "what changed (recently | in the last 2 weeks | in the last 20 commits)?": list the window itself
         counted = True  # whether the label already says how many commits
         if window and window.commits:
-            newest = _newest(deps, ctx, roots, min(window.commits, MAX_WINDOW_COMMITS), None)
+            newest = _newest(ctx, roots, min(window.commits, MAX_WINDOW_COMMITS), None)
         else:
             counted = False
             w = window or default_window()
-            newest = _newest(deps, ctx, roots, MAX_WINDOW_COMMITS, w.git_since)
+            newest = _newest(ctx, roots, MAX_WINDOW_COMMITS, w.git_since)
             if not window and len(newest) < DEFAULT_MIN_COMMITS:
-                newest = _newest(deps, ctx, roots, RECENT_COMMITS, None)
+                newest = _newest(ctx, roots, RECENT_COMMITS, None)
                 w.label = f"the newest {len(newest)} commits, since fewer than {DEFAULT_MIN_COMMITS} landed in {w.label}"
                 counted = True
             window = w

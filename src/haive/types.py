@@ -271,10 +271,3 @@ class VectorStore(Protocol):
     def search(self, query: str, k: int, filter: dict[str, Any] | None = None) -> list[Hit]: ...
 
     def count(self, filter: dict[str, Any] | None = None) -> int: ...
-
-
-@runtime_checkable
-class ChatModel(Protocol):
-    """The subset of a LangChain chat model that haive uses."""
-
-    def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any: ...

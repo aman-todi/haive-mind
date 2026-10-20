@@ -89,9 +89,9 @@ class Meter(BaseCallbackHandler):
         self._attempt_mark[run_id] = len(_attempts.events)
 
     def _finish(self, run_id: UUID, ok: bool, usage: dict[str, Any] | None = None, error: str = "") -> None:
-        t0, role, model = self._runs.pop(run_id, (time.monotonic(), "?", "?"))
+        t0, step, model = self._runs.pop(run_id, (time.monotonic(), "?", "?"))
         entry: dict[str, Any] = {
-            "type": "llm", "role": role, "model": model, "ms": round((time.monotonic() - t0) * 1000), "ok": ok,
+            "type": "llm", "step": step, "model": model, "ms": round((time.monotonic() - t0) * 1000), "ok": ok,
         }  # fmt: skip
         if error:
             entry["error"] = error[:200]
@@ -102,7 +102,7 @@ class Meter(BaseCallbackHandler):
         if self.db is not None:
             usage = usage or {}
             self.db.record_usage(
-                role,
+                step,
                 model,
                 int(usage.get("input_tokens", 0) or 0),
                 int(usage.get("output_tokens", 0) or 0),
