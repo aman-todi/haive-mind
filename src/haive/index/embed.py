@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import re
+import threading
 import warnings
 from collections.abc import Iterator
 from pathlib import Path
@@ -69,6 +70,9 @@ class FastEmbedder(Embeddings):
         self.dim = dim
         self.batch_size = batch_size
         self._model = None
+        # A question is searched once per repo in scope (in parallel); embed it once.
+        self._queries: dict[str, list[float]] = {}
+        self._query_lock = threading.Lock()
 
     @property
     def model(self):
@@ -99,7 +103,12 @@ class FastEmbedder(Embeddings):
         return [v.tolist() for v in self.model.embed(texts, batch_size=self.batch_size)]
 
     def embed_query(self, text: str) -> list[float]:
-        return next(iter(self.model.query_embed(text[:MAX_EMBED_CHARS]))).tolist()
+        with self._query_lock:
+            if text not in self._queries:
+                if len(self._queries) > 64:
+                    self._queries.clear()
+                self._queries[text] = next(iter(self.model.query_embed(text[:MAX_EMBED_CHARS]))).tolist()
+            return self._queries[text]
 
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")

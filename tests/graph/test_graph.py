@@ -501,11 +501,13 @@ def test_recall_groups_by_repo(cfg, db, store, other_repo):
         },
     )
     res = r.run("how did I call the valuations API before?", thread_id="t")
+    vector = [e for e in res.state["evidence"] if e["why"].startswith("best in")]
     by_repo = {}
-    for e in res.state["evidence"]:
-        if e["why"].startswith("best in"):
-            by_repo[e["repo"]] = by_repo.get(e["repo"], 0) + 1
-    assert by_repo and all(n <= 2 for n in by_repo.values())
+    for e in vector:
+        by_repo[e["repo"]] = by_repo.get(e["repo"], 0) + 1
+    assert set(by_repo) == {"valuation", "frontend"}  # every repo in scope gets its own search
+    assert all(n <= 4 for n in by_repo.values())
+    assert vector[0]["repo"] != vector[1]["repo"]  # each repo's best chunk comes before any second one
 
 
 def test_debug_python_trace(cfg, db, store):

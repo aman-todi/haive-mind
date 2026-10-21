@@ -53,3 +53,23 @@ def test_embedding_model_cache_lives_in_data_dir(monkeypatch, haive_home):
     shown = logging.LogRecord("x", logging.WARNING, "", 0, "Some other hub warning", None, None)
     assert not all(f.filter(hidden) for f in hub.filters)
     assert all(f.filter(shown) for f in hub.filters)
+
+
+def test_query_is_embedded_once_across_repeated_searches(monkeypatch):
+    # Cross-repo recall searches each repo in scope with the same question.
+    import types
+
+    calls = []
+
+    class FakeTextEmbedding:
+        def __init__(self, model_name, cache_dir=None):
+            pass
+
+        def query_embed(self, text):
+            calls.append(text)
+            yield types.SimpleNamespace(tolist=lambda: [0.1, 0.2])
+
+    monkeypatch.setitem(sys.modules, "fastembed", types.SimpleNamespace(TextEmbedding=FakeTextEmbedding))
+    emb = FastEmbedder()
+    assert [emb.embed_query("how do I search?") for _ in range(5)] == [[0.1, 0.2]] * 5
+    assert calls == ["how do I search?"]

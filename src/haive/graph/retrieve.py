@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from haive.graph.state import Deps, GraphState, NodeCtx, ev_from_hit, ev_from_snippet
@@ -128,28 +129,48 @@ def lookup(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> lis
     return _dedupe_overlaps(evs)[:14]
 
 
+VECTOR_PER_REPO = 4  # chunks per repo in cross-repo (recall) vector search
+RECALL_EVIDENCE = 24
+
+
+def vector_per_repo(deps: Deps, query: str, scope: list[str], ctx: NodeCtx) -> list[dict[str, Any]]:
+    """One vector search per repo, in parallel, so every repo in scope gets its best chunks (a single
+    top-k over all repos lets one or two repos fill every slot). Repos are ordered by their best
+    match and their hits interleaved: each repo's best chunk comes before any repo's second."""
+    kinds = ["code", "config", "doc"]
+
+    def search(repo: str) -> list[Any]:
+        return deps.store.search(query, VECTOR_PER_REPO, {"repo": [repo], "kind": kinds})
+
+    def run() -> list[list[Any]]:
+        with ThreadPoolExecutor(max_workers=min(8, len(scope)) or 1) as pool:
+            return list(pool.map(search, scope))
+
+    per_repo = [
+        hits for hits in ctx.timed("vector", f"{len(scope)} repos x k={VECTOR_PER_REPO}", run) if hits
+    ]
+    per_repo.sort(key=lambda hits: -hits[0].score)
+    evs: list[dict[str, Any]] = []
+    for rank in range(VECTOR_PER_REPO):
+        for hits in per_repo:
+            if rank < len(hits):
+                h = hits[rank]
+                ev = ev_from_hit(deps, h, f"best in {h.repo} {h.score:.2f}")
+                if ev:
+                    evs.append(ev)
+    return evs
+
+
 def recall(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> list[dict[str, Any]]:
     q = query_of(state)
     evs: list[dict[str, Any]] = []
     if deps.use_vector:
-        hits = ctx.timed(
-            "vector",
-            "code/config/doc k=24",
-            lambda: deps.store.search(q, 24, {"repo": scope, "kind": ["code", "config", "doc"]}),
-        )
-        per_repo: dict[str, int] = defaultdict(int)
-        for h in hits:
-            if per_repo[h.repo] >= 2:
-                continue
-            ev = ev_from_hit(deps, h, f"best in {h.repo} {h.score:.2f}")
-            if ev:
-                per_repo[h.repo] += 1
-                evs.append(ev)
+        evs += vector_per_repo(deps, q, scope, ctx)
     if deps.use_ripgrep:
         evs += ripgrep_evidence(
             deps, state.get("identifiers") or keywords(q)[:4], scope, ctx, word=False, max_files=4
         )
-    return _dedupe_overlaps(evs)[:14]
+    return _dedupe_overlaps(evs)[:RECALL_EVIDENCE]
 
 
 RECENT_COMMITS = 12

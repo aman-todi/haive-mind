@@ -207,3 +207,10 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     PROGRESS.md is a short current status. Cross-references for earlier entries: #27 revises #9 (commit
     chunks are now citable via `CommitRef`), and #37's "rest of the question" became "rest of the
     process" for 404s in #38.
+
+40. **Cross-repo recall searches each repo separately.** One top-24 vector search over all repos in
+    scope let one or two repos fill every slot (a "vector search across my projects" question got
+    hnsw-engine and haive-mind only). Recall now runs one search per repo (4 chunks each) in parallel,
+    orders repos by their best match, and interleaves their hits so each repo's best chunk is in the
+    evidence before any repo's second; evidence is capped at 24. The question is embedded once (the
+    embedder caches query vectors), so the extra cost is one Pinecone query per repo.
