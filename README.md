@@ -33,7 +33,7 @@ Walkthrough
 | Intent | Example |
 |---|---|
 | lookup | "Where does the DCF choose a valuation method?" / "How does X work?" |
-| recall | "How did I implement OAuth before?" (across all your repos) |
+| recall | "How did I implement OAuth before?" (searches every repo, or the ones you name, and keeps the ones whose code best matches) |
 | history | "When and why did I add retries to the API client?" / "What changed in weatherpruf in the last month?" (commits, `git log -S/-L`; time windows like "last 2 weeks", "since August", "last 20 commits", defaulting to 2 weeks) |
 | debug | `haive debug trace.txt`: ranked hypotheses, evidence, a suggested diff (never applied), how to verify |
 | compare | "How do weatherpruf and the valuation app differ on deploy?" |

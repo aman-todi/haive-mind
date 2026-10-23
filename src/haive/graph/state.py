@@ -62,6 +62,7 @@ class GraphState(TypedDict, total=False):
     web_mode: str
     intent: str
     scope_repos: list[str]
+    scope_auto: bool  # recall over all repos: retrieval narrows scope to the relevant ones
     compare_targets: list[dict[str, Any]]
     identifiers: list[str]
     router: dict[str, Any] | None
@@ -105,6 +106,7 @@ def turn_input(
         "web_mode": web_mode,
         "intent": "",
         "scope_repos": [],
+        "scope_auto": False,
         "compare_targets": [],
         "identifiers": [],
         "router": None,

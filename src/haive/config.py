@@ -79,7 +79,7 @@ class ModelsConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
     provider: str = "openai"  # langchain model_provider; any OpenAI-compatible endpoint works
     api_key_env: str = "OPENROUTER_API_KEY"
-    requests_per_minute: int = 20  # client-side throttle (OpenRouter free models allow ~20/min)
+    requests_per_minute: int = 20  # client-side throttle for free models (OpenRouter allows ~20/min)
     max_retries: int = 2  # per model, by the OpenAI client (honors Retry-After), before falling back
     timeout_seconds: int = 90  # per request; a stalled request is retried, so worst case ~3x this per model
 

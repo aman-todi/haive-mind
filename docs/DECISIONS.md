@@ -214,3 +214,20 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     orders repos by their best match, and interleaves their hits so each repo's best chunk is in the
     evidence before any repo's second; evidence is capped at 24. The question is embedded once (the
     embedder caches query vectors), so the extra cost is one Pinecone query per repo.
+
+41. **Vector scores, not repo names, pick the repos for cross-repo questions.** The router only sees
+    repo and group names, so for "how have I done X across my projects?" it guessed scope from names
+    (it picked gre-prep-tool for vector search). For recall, the router now keeps only repos the user
+    names; otherwise scope is every repo, each gets its own vector search (#40), and repos whose best
+    match is below 0.8x the best repo's are dropped. The kept repos become the scope for the rest of
+    the question; a notice names them and --trace lists every repo's best score (kept and dropped) to
+    tune the 0.8.
+
+42. **Speed pass.** (1) LangChain's `InMemoryRateLimiter` starts with an empty bucket, so the first
+    LLM call of every command waited 1/rate = 3 s, and back-to-back calls 3 s each; haive's `Throttle`
+    starts full, and only free models are throttled (paid ones have no 20/min limit). (2) Loading the
+    embedding model from disk takes 2-3 s per command; it now loads in a background thread while the
+    router's LLM call runs (only if already downloaded). (3) History questions answered from a commit
+    window skip the grader's LLM call: the evidence is exactly the commits asked for. Checked and left:
+    CLI import (<1 s), freshness (~100 ms for 4 repos), ripgrep (~30 ms per search), the grader's
+    evidence (already abbreviated to 18 lines per item). The rest is LLM time.

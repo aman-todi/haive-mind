@@ -131,12 +131,18 @@ def lookup(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> lis
 
 VECTOR_PER_REPO = 4  # chunks per repo in cross-repo (recall) vector search
 RECALL_EVIDENCE = 24
+# With an automatic scope (recall over all repos), keep repos whose best match scores at least this
+# fraction of the best repo's. The trace lists every repo's best score, to tune it.
+RELEVANT_FRACTION = 0.8
 
 
-def vector_per_repo(deps: Deps, query: str, scope: list[str], ctx: NodeCtx) -> list[dict[str, Any]]:
+def vector_per_repo(
+    deps: Deps, query: str, scope: list[str], ctx: NodeCtx, prune: bool = False
+) -> tuple[list[dict[str, Any]], list[str]]:
     """One vector search per repo, in parallel, so every repo in scope gets its best chunks (a single
     top-k over all repos lets one or two repos fill every slot). Repos are ordered by their best
-    match and their hits interleaved: each repo's best chunk comes before any repo's second."""
+    match and their hits interleaved: each repo's best chunk comes before any repo's second. With
+    ``prune``, repos well below the best one are dropped. Returns (evidence, repos kept)."""
     kinds = ["code", "config", "doc"]
 
     def search(repo: str) -> list[Any]:
@@ -150,6 +156,17 @@ def vector_per_repo(deps: Deps, query: str, scope: list[str], ctx: NodeCtx) -> l
         hits for hits in ctx.timed("vector", f"{len(scope)} repos x k={VECTOR_PER_REPO}", run) if hits
     ]
     per_repo.sort(key=lambda hits: -hits[0].score)
+    if prune and per_repo and per_repo[0][0].score > 0:
+        floor = RELEVANT_FRACTION * per_repo[0][0].score
+        kept = [hits for hits in per_repo if hits[0].score >= floor]
+        dropped = [hits for hits in per_repo if hits[0].score < floor]
+        ctx.tool(
+            "relevance",
+            f"kept {', '.join(f'{h[0].repo} {h[0].score:.2f}' for h in kept)}"
+            + (f"; dropped {', '.join(f'{h[0].repo} {h[0].score:.2f}' for h in dropped)}" if dropped else ""),
+            0,
+        )
+        per_repo = kept
     evs: list[dict[str, Any]] = []
     for rank in range(VECTOR_PER_REPO):
         for hits in per_repo:
@@ -158,22 +175,31 @@ def vector_per_repo(deps: Deps, query: str, scope: list[str], ctx: NodeCtx) -> l
                 ev = ev_from_hit(deps, h, f"best in {h.repo} {h.score:.2f}")
                 if ev:
                     evs.append(ev)
-    return evs
+    return evs, [hits[0].repo for hits in per_repo]
 
 
-def recall(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> list[dict[str, Any]]:
+def recall(
+    deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     q = query_of(state)
+    auto = bool(state.get("scope_auto"))
     evs: list[dict[str, Any]] = []
+    kept = scope
     if deps.use_vector:
-        evs += vector_per_repo(deps, q, scope, ctx)
+        vector, relevant = vector_per_repo(deps, q, scope, ctx, prune=auto)
+        evs += vector
+        if auto and relevant:
+            kept = relevant
+            ctx.notices.append(f"Searched all {len(scope)} repos; the most relevant: {', '.join(kept)}.")
     if deps.use_ripgrep:
         evs += ripgrep_evidence(
-            deps, state.get("identifiers") or keywords(q)[:4], scope, ctx, word=False, max_files=4
+            deps, state.get("identifiers") or keywords(q)[:4], kept, ctx, word=False, max_files=4
         )
-    return _dedupe_overlaps(evs)[:RECALL_EVIDENCE]
+    return _dedupe_overlaps(evs)[:RECALL_EVIDENCE], ({"scope_repos": kept} if kept != scope else {})
 
 
 RECENT_COMMITS = 12
+HISTORY_WINDOW = "history window"  # evidence label for the commits of a requested time window
 MAX_WINDOW_COMMITS = 30  # cap on commits listed for one window (and history evidence overall)
 
 
@@ -225,7 +251,7 @@ def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> li
                 w.label = f"the newest {len(newest)} commits, since fewer than {DEFAULT_MIN_COMMITS} landed in {w.label}"
                 counted = True
             window = w
-        evs += [_commit_ev(repo, c, "history window") for repo, c in newest]
+        evs += [_commit_ev(repo, c, HISTORY_WINDOW) for repo, c in newest]
         ctx.notices.append(
             f"History window: {window.label}"
             + ("." if counted else f" ({len(newest)} commits).")
@@ -283,8 +309,9 @@ def make_retrieve(deps: Deps):
     def retrieve(state: GraphState, ctx: NodeCtx) -> dict[str, Any]:
         intent = state.get("intent", "lookup")
         fn = RETRIEVERS.get(intent, lookup)
-        evs = fn(deps, state, ctx, state.get("scope_repos") or list(deps.cfg.repos))
+        out = fn(deps, state, ctx, state.get("scope_repos") or list(deps.cfg.repos))
+        evs, extra = out if isinstance(out, tuple) else (out, {})
         ctx.detail = f"{intent}: {len(evs)} evidence"
-        return {"evidence": evs}
+        return {"evidence": evs, **extra}
 
     return retrieve

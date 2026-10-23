@@ -443,6 +443,7 @@ def test_recent_changes_cite_commits(cfg, db, store):
     res = r.run("what changed recently?", thread_id="t")
     whys = [e["why"] for e in res.state["evidence"]]
     assert whys[0] == "history window" and not any("git log -S" in w for w in whys)
+    assert "GradeOutput" not in fake.calls  # the window is the answer's evidence: no grading call
     assert any(n.startswith("History window: the newest") for n in res.state["notices"])
     assert f"sha={head[:12]}" in str(fake.seen[-1])  # commit shas are in the evidence headers
     good_claim, bad_claim = res.answer.sections[0].claims
@@ -488,26 +489,49 @@ def test_still_empty_answer_shows_the_evidence(cfg, db, store):
     assert not any("could not be verified" in n for n in notices)
 
 
-def test_recall_groups_by_repo(cfg, db, store, other_repo):
+def test_recall_searches_each_named_repo(cfg, db, store, other_repo):
     cfg.repos["frontend"] = RepoConfig(path=str(other_repo))
     r, _ = make_runner(
         cfg,
         db,
         store,
         {
-            "RouterOutput": [router("recall")],
+            "RouterOutput": [router("recall", repos=["valuation", "frontend"])],
             "GradeOutput": [grade()],
-            "Answer": [{"summary": "s", "sections": []}],
+            "Answer": [answer(DCF_CLAIM)],
         },
     )
-    res = r.run("how did I call the valuations API before?", thread_id="t")
+    res = r.run("how did I call the valuations API in valuation and frontend?", thread_id="t")
     vector = [e for e in res.state["evidence"] if e["why"].startswith("best in")]
     by_repo = {}
     for e in vector:
         by_repo[e["repo"]] = by_repo.get(e["repo"], 0) + 1
-    assert set(by_repo) == {"valuation", "frontend"}  # every repo in scope gets its own search
+    assert set(by_repo) == {"valuation", "frontend"}  # every named repo gets its own search, no pruning
     assert all(n <= 4 for n in by_repo.values())
     assert vector[0]["repo"] != vector[1]["repo"]  # each repo's best chunk comes before any second one
+    assert res.state["scope_repos"] == ["valuation", "frontend"]
+
+
+def test_recall_across_projects_lets_vector_scores_pick_repos(cfg, db, store, other_repo, monkeypatch):
+    from haive.graph import retrieve
+
+    cfg.repos["frontend"] = RepoConfig(path=str(other_repo))
+    monkeypatch.setattr(retrieve, "RELEVANT_FRACTION", 0.999)  # keep only the best-scoring repo
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router("recall", repos=["frontend"])],  # a guess from repo names
+            "GradeOutput": [grade()],
+            "Answer": [answer(DCF_CLAIM)],
+        },
+    )
+    res = r.run("how did I pick a valuation method across my projects?", thread_id="t")
+    relevance = next(e for e in res.state["node_log"] if e.get("name") == "relevance")
+    assert "kept valuation" in relevance["detail"] and "dropped frontend" in relevance["detail"]
+    assert res.state["scope_repos"] == ["valuation"]  # the unnamed guess was ignored; scores decided
+    assert "Searched all 2 repos; the most relevant: valuation." in res.state["notices"]
 
 
 def test_debug_python_trace(cfg, db, store):

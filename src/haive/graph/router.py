@@ -136,7 +136,13 @@ def make_router(deps: Deps):
                 scope = list(cfg.repos)
                 notices.append("Scope defaulted to all repos.")
         else:
-            scope, unknown = cfg.resolve_names(out.get("repos", []))
+            names = out.get("repos", [])
+            if intent == "recall":
+                # Cross-repo questions: keep only repos the user named. A repo's name says little about
+                # what's in it, so the per-repo vector search picks the rest (retrieve.recall).
+                text = (standalone or state["question"]).lower()
+                names = [n for n in names if n.lower() in text]
+            scope, unknown = cfg.resolve_names(names)
             if (unknown or (vague and about == "scope")) and not clarified:
                 q = (out.get("clarification") if about == "scope" else "") or (
                     f"I don't know {', '.join(repr(u) for u in unknown)}. Which repos or groups did you mean?"
@@ -147,6 +153,7 @@ def make_router(deps: Deps):
                 return {**update, "clarify_question": q, "clarify_kind": "scope", "notices": notices}
             if not scope:
                 scope = list(cfg.repos)
+                update["scope_auto"] = intent == "recall"
         update["scope_repos"] = scope
         update["clarify_question"] = None
         if vague and about == "question" and out.get("clarification") and not clarified:

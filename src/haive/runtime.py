@@ -66,4 +66,7 @@ class Runtime:
         )
 
     def runner(self, *, persist_thread: bool = False, ablation: str = "hybrid+loop") -> Runner:
+        warm = getattr(self.embedder, "warm", None)
+        if warm:
+            warm()  # loads the embedding model while the router's LLM call runs
         return Runner(self.deps(persist_thread=persist_thread, ablation=ablation), self.checkpointer)

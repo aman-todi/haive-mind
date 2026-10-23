@@ -70,17 +70,25 @@ class FastEmbedder(Embeddings):
         self.dim = dim
         self.batch_size = batch_size
         self._model = None
+        self._load_lock = threading.Lock()
         # A question is searched once per repo in scope (in parallel); embed it once.
         self._queries: dict[str, list[float]] = {}
         self._query_lock = threading.Lock()
 
     @property
     def model(self):
-        if self._model is None:
-            from fastembed import TextEmbedding
+        with self._load_lock:  # a search may arrive while warm() is still loading
+            if self._model is None:
+                from fastembed import TextEmbedding
 
-            self._model = TextEmbedding(model_name=self.model_name, cache_dir=model_cache_dir())
+                self._model = TextEmbedding(model_name=self.model_name, cache_dir=model_cache_dir())
         return self._model
+
+    def warm(self) -> None:
+        """Load the model in the background (2-3 s from disk) while the router's LLM call runs. Only
+        if it is already downloaded: a first download belongs to ``haive index``, which shows it."""
+        if self._model is None and self.is_downloaded():
+            threading.Thread(target=lambda: self.model, daemon=True).start()
 
     def is_downloaded(self) -> bool:
         name = self.model_name.split("/")[-1].lower()

@@ -50,7 +50,7 @@ def get_model(model_id: str, cfg: Config, rate_limiter: InMemoryRateLimiter | No
         "max_retries": m.max_retries,
         "timeout": m.timeout_seconds,
     }
-    if rate_limiter is not None:
+    if rate_limiter is not None and is_free(model_id):  # paid models aren't held to the free tier's limit
         kwargs["rate_limiter"] = rate_limiter
     if m.base_url:
         kwargs["base_url"] = m.base_url
@@ -65,12 +65,23 @@ def get_model(model_id: str, cfg: Config, rate_limiter: InMemoryRateLimiter | No
     return init_chat_model(model_id, **kwargs)
 
 
+def is_free(model_id: str) -> bool:
+    return model_id.endswith(":free") or model_id == "openrouter/free"
+
+
+class Throttle(InMemoryRateLimiter):
+    """LangChain's token bucket starts empty, so the first call of every command waited 1/rate
+    seconds (3 s at 20/min). This one starts full: short bursts go through, sustained load is paced."""
+
+    def __init__(self, requests_per_minute: int):
+        super().__init__(
+            requests_per_second=requests_per_minute / 60, check_every_n_seconds=0.1, max_bucket_size=3
+        )
+        self.available_tokens = self.max_bucket_size
+
+
 def make_rate_limiter(requests_per_minute: int) -> InMemoryRateLimiter | None:
-    if requests_per_minute <= 0:
-        return None
-    return InMemoryRateLimiter(
-        requests_per_second=requests_per_minute / 60, check_every_n_seconds=0.1, max_bucket_size=3
-    )
+    return Throttle(requests_per_minute) if requests_per_minute > 0 else None
 
 
 class LLM:

@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from haive import prompts
+from haive.graph.retrieve import HISTORY_WINDOW
 from haive.graph.state import Deps, GraphState, NodeCtx, render_evidence
 from haive.llm.budget import BudgetExceeded
 from haive.llm.models import LLMError
@@ -37,6 +38,10 @@ def make_grade(deps: Deps):
         if not deps.use_loop:
             ctx.detail = "sufficient (loop disabled by ablation)"
             return {"grade": {"status": "sufficient", "missing": [], "reason": "ablation"}}
+        if state.get("intent") == "history" and all(e.get("why") == HISTORY_WINDOW for e in evidence):
+            # "what changed (in the last month)?": the evidence is exactly the commits asked for
+            ctx.detail = "sufficient (history window)"
+            return {"grade": {"status": "sufficient", "missing": [], "reason": "history window"}}
         if deps.remaining(state) <= ANSWER_RESERVE:
             ctx.detail = "budget: skip grading"
             return {

@@ -176,3 +176,20 @@ def test_model_that_404s_is_skipped_afterwards():
     busy.text("title", "hi", Meter())
     busy.begin_question()
     assert busy.model_ids() == ["m1", "m2"]  # a 503 is transient: next question tries it again
+
+
+def test_throttle_starts_full_and_only_paces_free_models(monkeypatch):
+    import time
+
+    from haive.llm.models import get_model, is_free
+
+    rl = make_rate_limiter(20)
+    t0 = time.monotonic()
+    for _ in range(3):
+        rl.acquire()
+    assert time.monotonic() - t0 < 0.5  # LangChain's bucket starts empty: 3 s before the first call
+    assert is_free("nvidia/nemotron-3-super-120b-a12b:free") and is_free("openrouter/free")
+    assert not is_free("deepseek/deepseek-v4-pro-0813") and not is_free("openrouter/auto")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    assert get_model("deepseek/deepseek-v4-pro-0813", Config(), rl).rate_limiter is None
+    assert get_model("minimax/minimax-m3.1-flash:free", Config(), rl).rate_limiter is rl
