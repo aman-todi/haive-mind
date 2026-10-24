@@ -97,7 +97,7 @@ def retrieved_files(rt, q: dict[str, Any], ablation: str, store=None) -> list[tu
         store = store or rt.store
         hits = store.search(text or "code", 10, {"repo": scope, "kind": ["code", "config", "doc"]})
         vec = [(h.repo, h.path) for h in hits]
-        files = files + vec if ablation in ("hybrid", "hybrid+loop") else vec + files
+        files = vec + files if ablation == "vector_only" else files + vec  # combined retrieves like hybrid
     return list(dict.fromkeys(files))
 
 
