@@ -174,8 +174,8 @@ strong = ["nvidia/nemotron-3-ultra-550b-a55b:free", "thinkingmachines/inkling:fr
 fast_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
 strong_paid = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
 requests_per_minute = 20      # client-side throttle
-max_retries = 2               # per model (honors Retry-After) before falling back
-timeout_seconds = 90          # per request
+max_retries = 1               # per model (honors Retry-After) before falling back
+timeout_seconds = 180         # per request; slow answers aren't cut off
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]

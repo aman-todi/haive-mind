@@ -231,3 +231,9 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     window skip the grader's LLM call: the evidence is exactly the commits asked for. Checked and left:
     CLI import (<1 s), freshness (~100 ms for 4 repos), ripgrep (~30 ms per search), the grader's
     evidence (already abbreviated to 18 lines per item). The rest is LLM time.
+
+43. **Longer request timeout, one client retry; relevance cutoff 0.7.** A 90 s timeout could cut off
+    a slow free-model answer that needed a few more seconds, then start it over. The timeout is now
+    180 s and the client retries a failed request once (was twice), so a hung model costs at most
+    ~6 min before the next model in the tier's list, instead of up to 9 min at 180 s with two retries.
+    The cross-repo relevance cutoff (#41) is 0.7x the best repo's score, keeping more borderline repos.

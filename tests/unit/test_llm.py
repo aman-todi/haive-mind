@@ -131,7 +131,7 @@ def test_get_model_wiring(monkeypatch):
     cfg = Config()
     limiter = make_rate_limiter(20)
     model = get_model("nvidia/nemotron-3-super-120b-a12b:free", cfg, limiter)
-    assert model.max_retries == 2  # the OpenAI client retries 429s honoring Retry-After
+    assert model.max_retries == 1 and model.request_timeout == 180  # client retries honor Retry-After
     assert model.rate_limiter is limiter and isinstance(limiter, InMemoryRateLimiter)
     assert model.openai_api_base == "https://openrouter.ai/api/v1"
     assert model.default_headers["X-Title"] == "haive-mind"

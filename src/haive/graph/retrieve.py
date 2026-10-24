@@ -133,7 +133,7 @@ VECTOR_PER_REPO = 4  # chunks per repo in cross-repo (recall) vector search
 RECALL_EVIDENCE = 24
 # With an automatic scope (recall over all repos), keep repos whose best match scores at least this
 # fraction of the best repo's. The trace lists every repo's best score, to tune it.
-RELEVANT_FRACTION = 0.8
+RELEVANT_FRACTION = 0.7
 
 
 def vector_per_repo(
