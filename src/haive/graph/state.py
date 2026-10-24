@@ -89,7 +89,7 @@ class GraphState(TypedDict, total=False):
     answer_retries: int
     retry_answer: bool
     answer_wants_more: bool  # combined mode: the answer asked for more evidence instead of answering
-    first_verify: dict[str, int] | None
+    first_verify: dict[str, Any] | None
     title: str | None
     notices: Annotated[list[str], add_or_reset]
     node_log: Annotated[list[dict[str, Any]], add_or_reset]

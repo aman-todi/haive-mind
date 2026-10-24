@@ -132,6 +132,7 @@ def run_full(rt, questions: list[dict[str, Any]], ablation: str, console) -> lis
             row["file_hit"] = metrics.file_hit(ans, q["expected_files"])
             fv = res.state.get("first_verify") or {}
             row["citations"], row["citations_ok"] = fv.get("repo_claims", 0), fv.get("repo_claims_ok", 0)
+            row["first_errors_list"] = fv.get("errors") or []
             if q.get("expected_line") and q["expected_files"]:
                 row["debug_top"], row["debug_any"] = metrics.debug_hits(
                     ans, q["expected_files"][0], q["expected_line"]
@@ -268,6 +269,7 @@ def main(
     out = (results_dir or EVAL_DIR / "results") / datetime.now().strftime("%Y%m%d-%H%M%S")
     out.mkdir(parents=True, exist_ok=True)
     summaries: dict[str, dict[str, Any]] = {}
+    failures: list[str] = []  # first-try verification errors by kind, per ablation
     for ab in abls:
         rows = (
             run_full(rt, questions, ab, console)
@@ -276,17 +278,36 @@ def main(
         )
         if not rows:
             continue
-        write_csv(out / f"{ab.replace('+', '_')}.csv", rows)
+        csv_rows = [
+            {**{k: v for k, v in r.items() if k != "first_errors_list"},
+             "first_errors": " | ".join(r.get("first_errors_list") or [])}
+            for r in rows
+        ]  # fmt: skip
+        write_csv(out / f"{ab.replace('+', '_')}.csv", csv_rows)
         summaries[ab] = metrics.summarize(rows)
+        kinds = metrics.error_kinds(rows)
+        if kinds:
+            failures.append(
+                f"### {ab}\n\n| kind | count |\n|---|---|\n"
+                + "\n".join(f"| {k} | {n} |" for k, n in kinds.items())
+            )
     models = f"model={rt.cfg.models.chain()[0]}"
     header = (
         f"Measured {datetime.now():%Y-%m-%d} on `{path.name}` ({len(questions)} questions; {models}; "
         f"store={rt.cfg.vector_store.backend}; embeddings={rt.cfg.embeddings.model})."
     )
     table = summary_table(summaries)
-    (out / "summary.md").write_text(f"# Eval results\n\n{header}\n\n{table}\n")
+    errors = (
+        "\n\n## First-try verification failures\n\nPer question in the CSVs' `first_errors` column.\n\n"
+        + "\n\n".join(failures)
+        if failures
+        else ""
+    )
+    (out / "summary.md").write_text(f"# Eval results\n\n{header}\n\n{table}{errors}\n")
     write_csv(out / "summary.csv", [{"ablation": k, **v} for k, v in summaries.items()])
     console.print(table)
+    if errors:
+        console.print(errors.strip())
     if update_readme(table, header, readme):
         console.print("README results table updated.")
     return out

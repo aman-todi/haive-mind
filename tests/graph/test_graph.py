@@ -28,7 +28,7 @@ def test_lookup_happy_path(cfg, db, store):
     assert nodes(res) == ["router", "freshness", "retrieve", "grade", "answer", "verify", "finalize"]
     assert res.state["llm_calls"] == 3 and fake.calls == ["RouterOutput", "GradeOutput", "Answer"]
     assert not res.answer.sections[0].claims[0].unverified
-    assert res.meta()["first_verify"] == {"repo_claims": 1, "repo_claims_ok": 1}
+    assert res.meta()["first_verify"] == {"repo_claims": 1, "repo_claims_ok": 1, "errors": []}
     ev_paths = {e["path"] for e in res.state["evidence"]}
     assert "app/valuation/dcf.py" in ev_paths
     assert ".env" not in ev_paths
@@ -50,7 +50,8 @@ def test_verify_retry_then_success(cfg, db, store):
     assert nodes(res).count("answer") == 2 and res.state["answer_retries"] == 1
     assert "line range invalid" in fake.seen[-1][-2].content or "line range invalid" in str(fake.seen[-1])
     assert not any(c.unverified for c in res.answer.all_claims())
-    assert res.meta()["first_verify"] == {"repo_claims": 1, "repo_claims_ok": 0}
+    fv = res.meta()["first_verify"]
+    assert (fv["repo_claims"], fv["repo_claims_ok"]) == (1, 0) and "line range invalid" in fv["errors"][0]
 
 
 def test_retries_exhausted_marks_unverified(cfg, db, store):

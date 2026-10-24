@@ -119,3 +119,33 @@ def fmt(key: str, v: Any) -> str:
     if isinstance(v, float):
         return f"{v:.2f}"
     return str(v)
+
+
+# First-try verification errors (graph/verify.py messages) grouped into kinds, to see what to fix.
+ERROR_KINDS = [
+    ("line range invalid", "line range outside the file"),
+    ("not found within the cited lines", "symbol not in the cited lines"),
+    ("path was not among the retrieved evidence", "file not in the evidence"),
+    ("does not exist in the working tree", "file does not exist"),
+    ("unknown repo", "unknown repo"),
+    ("commit was not among", "commit not in the evidence"),
+    ("not a commit sha", "malformed commit sha"),
+    ("the answer has no claims", "answer with no claims"),
+    ("url not in this run", "web URL not in the results"),
+]
+
+
+def error_kind(message: str) -> str:
+    for needle, kind in ERROR_KINDS:
+        if needle in message:
+            return kind
+    return "wrong citation type"
+
+
+def error_kinds(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for r in rows:
+        for msg in r.get("first_errors_list") or []:
+            k = error_kind(msg)
+            counts[k] = counts.get(k, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: -kv[1]))

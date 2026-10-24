@@ -171,6 +171,7 @@ def make_verify(deps: Deps):
             update["first_verify"] = {
                 "repo_claims": len(repo_claims),
                 "repo_claims_ok": len([k for k in repo_claims if k not in res.bad_claims]),
+                "errors": res.errors[:20],  # what failed on the first try (eval reports these)
             }
         retries = state.get("answer_retries", 0)
         # A retry that fixed less than half of the remaining problems won't be helped by another one.

@@ -162,6 +162,7 @@ def test_eval_on_sample(monkeypatch, tmp_path):
     assert {r["id"] for r in rows} >= {"lookup-choose-method", "debug-missing-key"}
     assert not any(r.get("error") for r in rows), [r["error"] for r in rows if r.get("error")]
     by_id = {r["id"]: r for r in rows}
+    assert "first_errors" in rows[0]  # first-try verification errors, per question
     assert by_id["lookup-choose-method"]["recall10"] == "True"
     assert by_id["debug-missing-key"]["recall10"] == "True"  # trace frames map to the bug repo
     from eval.run import retrieved_files
@@ -176,3 +177,14 @@ def test_eval_on_sample(monkeypatch, tmp_path):
         ).stdout
         == ""
     )
+
+
+def test_first_try_errors_are_grouped_by_kind():
+    rows = [
+        {"first_errors_list": ["[s0.c0] \"x\": r/a.py:9-99: line range invalid (file has 20 lines)",
+                               "[s0.c1] \"y\": r/b.py:1-2: path was not among the retrieved evidence"]},
+        {"first_errors_list": ["[s0.c0] \"z\": r/a.py:3-4: line range invalid (file has 20 lines)"]},
+        {},
+    ]  # fmt: skip
+    assert metrics.error_kinds(rows) == {"line range outside the file": 2, "file not in the evidence": 1}
+    assert metrics.error_kind("model claim must not have refs") == "wrong citation type"

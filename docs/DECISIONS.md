@@ -266,3 +266,9 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     camelCase, dotted, ENV_VARS) before the vector search and on plain words after it; the eval's
     recall@10 mirrors that order. When the user names repos (-r/-g, or a clarify answer), the router
     no longer answers from general knowledge. Eval ties are broken by path so recall@10 is stable.
+
+48. **Eval reports why first-try citations failed.** A paid 5-question run scored 100% intent, file
+    hits, and recall@10, but 81% first-try citation validity; each failure costs a retry answer call.
+    The verify node now keeps the first try's error messages in `first_verify`, eval writes them to a
+    `first_errors` CSV column, and `summary.md` counts them by kind (line range outside the file,
+    symbol not in the cited lines, file not in the evidence, ...) so the full run shows what to fix.
