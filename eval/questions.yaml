@@ -24,12 +24,12 @@
   expected_intent: lookup
   expected_files: [haive-mind/src/haive/graph/router.py]
 - id: lookup-haive-commit-check
-  question: How does haive check that a cited commit is real?
+  question: Which function in haive-mind verifies the citations in an answer?
   repos: [haive-mind]
   expected_intent: lookup
   expected_files: [haive-mind/src/haive/graph/verify.py]
 - id: lookup-haive-time-window
-  question: How are phrases like "in the last 2 weeks" turned into git log options?
+  question: Where does haive-mind parse time windows such as "last 2 weeks" out of a question?
   repos: [haive-mind]
   expected_intent: lookup
   expected_files: [haive-mind/src/haive/graph/timewindow.py]

@@ -861,3 +861,32 @@ def test_combined_mode_answer_can_ask_for_more_then_answers(cfg, db, store):
     assert any("definition of choose_method" in e["why"] for e in res.state["evidence"])
     assert fake.calls.count("AnswerOrMore") == 1 and fake.calls.count("Answer") == 1
     assert "GradeOutput" not in fake.calls and res.answer.all_claims()
+
+
+def test_explicit_scope_never_routes_to_general(cfg, db, store):
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {"RouterOutput": [router("general")], "GradeOutput": [grade()], "Answer": [answer(DCF_CLAIM)]},
+    )
+    res = r.run("how are valuation methods chosen?", thread_id="t", scope=["valuation"])
+    assert res.state["intent"] == "lookup"
+
+
+def test_lookup_ranks_plain_word_matches_after_vector_hits(cfg, db, store):
+    r, _ = make_runner(
+        cfg,
+        db,
+        store,
+        {
+            "RouterOutput": [router(identifiers=["valuation", "method"])],  # words, not code names
+            "GradeOutput": [grade()],
+            "Answer": [answer(DCF_CLAIM)],
+        },
+    )
+    res = r.run("where is the valuation method picked?", thread_id="t")
+    whys = [e["why"] for e in res.state["evidence"]]
+    first_vector = next(i for i, w in enumerate(whys) if w.startswith("vector"))
+    first_rg = next((i for i, w in enumerate(whys) if w.startswith("ripgrep")), len(whys))
+    assert first_vector < first_rg

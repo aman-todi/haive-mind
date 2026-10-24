@@ -101,6 +101,8 @@ def make_router(deps: Deps):
         intent = out.get("intent", "lookup")
         if intent not in INTENTS:
             intent = heuristic_intent(state["question"])
+        if intent == "general" and (state.get("requested_scope") or state.get("scope_hint")):
+            intent = "lookup"  # the user pointed at repos (-r/-g or a clarify answer): answer from them
         # A follow-up that leans on earlier turns ("and the tests for it?") is rewritten by the router so
         # retrieval, grading, and expand search for the real subject. The answer still sees the original.
         standalone = (out.get("standalone_question") or "").strip()

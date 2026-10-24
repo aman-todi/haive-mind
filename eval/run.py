@@ -87,17 +87,22 @@ def retrieved_files(rt, q: dict[str, Any], ablation: str, store=None) -> list[tu
         mapper = PathMapper(rt.db.indexed_paths(scope), roots, scope)
         files += [(f.repo, f.repo_path) for f in mapper.map_frames(pt.frames) if f.repo and not f.external]
     text = q["question"] + (" " + parse(trace).message if trace else "")
+    code = code_identifiers(text)
+    rg: list[tuple[str, str]] = []
     if ablation != "vector_only":
         counts: dict[tuple[str, str], int] = {}
-        for ident in code_identifiers(text) or [w for w in re.findall(r"[A-Za-z_]\w{3,}", text)][:4]:
+        for ident in code or [w for w in re.findall(r"[A-Za-z_]\w{3,}", text)][:4]:
             for m in ripgrep.search(ident, roots, fixed=True, max_per_repo=30):
                 counts[(m.repo, m.path)] = counts.get((m.repo, m.path), 0) + 1
-        files += [f for f, _ in sorted(counts.items(), key=lambda kv: -kv[1])]
+        rg = [f for f, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]  # ties: by path
+    vec: list[tuple[str, str]] = []
     if ablation != "ripgrep_only":
         store = store or rt.store
         hits = store.search(text or "code", 10, {"repo": scope, "kind": ["code", "config", "doc"]})
         vec = [(h.repo, h.path) for h in hits]
-        files = vec + files if ablation == "vector_only" else files + vec  # combined retrieves like hybrid
+    # Like retrieve.lookup (combined retrieves the same): ripgrep on code names first, plain-word
+    # matches after the vector hits.
+    files += rg + vec if code else vec + rg
     return list(dict.fromkeys(files))
 
 

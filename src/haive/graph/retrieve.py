@@ -7,6 +7,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from haive.graph.router import code_identifiers
 from haive.graph.state import Deps, GraphState, NodeCtx, ev_from_hit, ev_from_snippet
 from haive.graph.timewindow import DEFAULT_MIN_COMMITS, default_window, parse_window
 from haive.index.commits import utc_iso
@@ -117,15 +118,21 @@ def _dedupe_overlaps(evs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def lookup(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> list[dict[str, Any]]:
     idents = state.get("identifiers") or []
+    # Code names (snake_case, camelCase, dotted, ENV_VARS) are precise ripgrep targets; plain words the
+    # router passes as identifiers ("scope", "repos") match all over and would push vector hits out.
+    code = [i for i in idents if code_identifiers(i) == [i]]
+    words = [i for i in idents if i not in code]
     q = query_of(state)
     evs: list[dict[str, Any]] = []
     if deps.use_ripgrep:
         evs += symbol_evidence(deps, idents, scope, ctx)
-        evs += ripgrep_evidence(deps, idents, scope, ctx)
+        evs += ripgrep_evidence(deps, code, scope, ctx)
     if deps.use_vector:
         evs += vector_evidence(deps, q, scope, ["code", "config"], 8, ctx)
-    elif not idents:
-        evs += ripgrep_evidence(deps, keywords(q), scope, ctx, word=False)
+    if deps.use_ripgrep:
+        evs += ripgrep_evidence(
+            deps, words or ([] if deps.use_vector else keywords(q)), scope, ctx, word=False
+        )
     return _dedupe_overlaps(evs)[:14]
 
 

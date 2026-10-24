@@ -251,3 +251,18 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     is exhausted, so it can't loop. The nothing-relevant -> rewrite path is unchanged. Off by default
     until `haive eval --ablation hybrid+loop,combined` on the author's suite shows it is at least as
     good: it saves one call per question, but models lean toward answering with what they have.
+
+46. **First eval run (5 lookup questions, free models): combined stays off.** Combined used more LLM
+    calls (7.4 vs 6.6: its answers asked for more evidence, and each request costs an expand step plus
+    another full answer call), was slower (p50 47 s vs 26 s), and had lower first-try citation
+    validity (82% vs 95%). Intent and file hits tied (80%); both misses were the router misreading
+    two ambiguously worded questions (reworded). The run also exposed an eval bug: recall@10 ranked
+    ripgrep before vector hits for hybrid but not combined, so identical retrieval scored 20% vs 100%.
+
+47. **Plain words rank after vector hits in lookup; an explicit scope never routes to general.** The
+    router often passes plain words as identifiers ("scope", "repos"); ripgrep on those matches all
+    over and pushed the vector hits out of the evidence (recall@10 20% with ripgrep first vs 100% with
+    vector first on the same retrieval). Lookup now runs ripgrep on code-like names (snake_case,
+    camelCase, dotted, ENV_VARS) before the vector search and on plain words after it; the eval's
+    recall@10 mirrors that order. When the user names repos (-r/-g, or a clarify answer), the router
+    no longer answers from general knowledge. Eval ties are broken by path so recall@10 is stable.
