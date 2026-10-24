@@ -89,7 +89,7 @@ flowchart TD
   evidence dicts. When the model can't call tools, fails, or the budget can't cover a planning call,
   deterministic heuristics produce the plan and the same `ToolNode` runs it.
 - **Verification** (`graph/verify.py`) is pure code: a repo claim's file must exist in the live tree, the
-  lines must be in range, the symbol must appear within ±3 lines, and the path must be among this run's
+  lines must be in range, a cited symbol must appear within ±3 lines or be a definition enclosing them, and the path must be among this run's
   evidence; a commit ref's sha must match a commit in this run's evidence; web URLs must be among this
   run's results; model claims carry no refs. Debug diffs are checked line by line against the cited
   file. A failed answer is retried with the errors, but a retry that fixes less than half of them ends

@@ -103,7 +103,7 @@ def make_answer(deps: Deps):
         if state.get("verify_errors"):
             errors = (
                 "Your previous answer failed verification. Fix these problems: cite only paths and line ranges, or "
-                "commit shas, shown in the evidence headers; keep symbols inside the cited lines; and change "
+                "commit shas, shown in the evidence headers; name only symbols in or enclosing the cited lines; and change "
                 "unsupported claims to source 'model' with no refs.\n- "
                 + "\n- ".join(state["verify_errors"][:15])
             )

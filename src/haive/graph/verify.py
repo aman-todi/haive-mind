@@ -54,6 +54,43 @@ class _Lines:
         return self.cache[key]
 
 
+SYMBOL_WORDS = {"class", "function", "method", "def", "fn", "func", "struct", "module"}
+
+
+def symbol_name(symbol: str) -> str:
+    """The bare identifier in a cited symbol: `parse_metric()` -> parse_metric, HnswIndex<T>::search ->
+    search, "BruteForceIndex class" -> BruteForceIndex."""
+    words = [w for w in re.findall(r"[A-Za-z_]\w*", symbol) if w not in SYMBOL_WORDS]
+    return words[-1] if words else symbol
+
+
+def enclosing_headers(lines: list[str], start_line: int, max_up: int = 2000) -> list[str]:
+    """Header lines of the scopes around ``start_line`` (1-based), innermost first: walking up, each
+    non-blank, non-comment line indented less than the scope below it (``def``/``class``/a function
+    signature/``TEST_P(...) {``). Lets a claim about lines inside a function name that function."""
+    first = start_line - 1
+    while first < len(lines) and not lines[first].strip():
+        first += 1
+    if first >= len(lines):
+        return []
+    indent = len(lines[first]) - len(lines[first].lstrip())
+    out: list[str] = []
+    for k in range(start_line - 2, max(-1, start_line - 2 - max_up), -1):
+        if indent == 0:
+            break
+        ln = lines[k]
+        stripped = ln.lstrip()
+        # comments and decorators aren't headers; a line opening with a closing bracket ends a multi-line
+        # signature (``) -> X:``) or an earlier block (``}``), so the header is further up
+        if not stripped or stripped.startswith(("#", "//", "/*", "*", "@", ")", "]", "}")):
+            continue
+        k_indent = len(ln) - len(stripped)
+        if k_indent < indent:
+            out.append(ln)
+            indent = k_indent
+    return out
+
+
 def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, str]]) -> list[str]:
     loc = f"{ref.repo}/{ref.path}:{ref.start_line}-{ref.end_line}"
     if ref.repo not in lines_.roots:
@@ -67,9 +104,13 @@ def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, 
     elif ref.symbol:
         lo = max(0, ref.start_line - 1 - SYMBOL_SLACK)
         hi = min(len(lines), ref.end_line + SYMBOL_SLACK)
-        name = re.split(r"[.:]+", ref.symbol)[-1].strip("()") or ref.symbol
-        if not any(name in ln for ln in lines[lo:hi]):
-            errs.append(f"{loc}: symbol '{ref.symbol}' not found within the cited lines")
+        name = symbol_name(ref.symbol)
+        near = any(name in ln for ln in lines[lo:hi])
+        word = re.compile(rf"\b{re.escape(name)}\b")
+        if not near and not any(word.search(h) for h in enclosing_headers(lines, ref.start_line)):
+            errs.append(
+                f"{loc}: symbol '{ref.symbol}' is neither in the cited lines nor a definition around them"
+            )
     if (ref.repo, ref.path) not in evidence_paths:
         errs.append(f"{loc}: path was not among the retrieved evidence")
     return errs

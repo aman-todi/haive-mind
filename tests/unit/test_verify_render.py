@@ -120,3 +120,39 @@ def test_answer_schema_requires_sections_for_models():
     assert set(params["required"]) == {"summary", "sections"}
     assert '"required": ["claims"]' in json.dumps(params)
     assert Answer(summary="s").sections == []  # code may still build an empty answer
+
+
+def test_symbol_may_be_the_definition_enclosing_the_cited_lines(tmp_path):
+    from haive.graph.verify import _Lines, check_repo_ref, symbol_name
+
+    (tmp_path / "m.py").write_text(
+        "class Meter:\n"
+        "    def __init__(self, limit):\n"
+        "        self.limit = limit\n"
+        "\n"
+        "\n"
+        "def verify(\n"
+        "    answer, evidence,\n"
+        ") -> bool:\n"
+        "    keys = list(answer)\n"
+        "    for k in keys:\n"
+        "        if k:\n"
+        "            pass\n"
+        "        total = len(evidence)\n"
+        "        seen = set()\n"
+        "        more = []\n"
+        "    return True\n"
+    )
+    lines, ev = _Lines({"r": tmp_path}), {("r", "m.py")}
+
+    def errs(start, end, symbol):
+        return check_repo_ref(
+            RepoRef(repo="r", path="m.py", start_line=start, end_line=end, symbol=symbol), lines, ev
+        )
+
+    assert not errs(13, 15, "verify")  # deep inside a function with a multi-line signature
+    assert not errs(3, 3, "Meter") and not errs(3, 3, "Meter.__init__")  # enclosing class / method
+    assert not errs(13, 15, "`verify()`")
+    assert "neither in the cited lines nor a definition around them" in errs(13, 15, "check_everything")[0]
+    assert symbol_name("HnswIndex<T>::search") == "search"
+    assert symbol_name("BruteForceIndex class") == "BruteForceIndex"

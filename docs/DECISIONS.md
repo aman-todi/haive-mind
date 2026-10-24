@@ -272,3 +272,14 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     The verify node now keeps the first try's error messages in `first_verify`, eval writes them to a
     `first_errors` CSV column, and `summary.md` counts them by kind (line range outside the file,
     symbol not in the cited lines, file not in the evidence, ...) so the full run shows what to fix.
+
+49. **A cited symbol may be the definition enclosing the cited lines.** The full eval run's first-try
+    failures were 17x "symbol not found within the cited lines" (and 1 repo claim with no refs). Every
+    one was a correct citation: lines inside a function or class, labeled with that function or class,
+    whose `def`/`class` line was more than 3 lines above (e.g. `verify.py:180-187`, symbol `verify`;
+    `budget.py:63-69`, symbol `Meter`). Each cost a retry answer call. Verification now also accepts
+    the symbol if it names one of the enclosing scope headers, found by walking up through lines of
+    smaller indentation (skipping comments, decorators, and lines that open with a closing bracket,
+    i.e. the tail of a multi-line signature or an earlier block's `}`). Symbols are reduced to their
+    bare name first (`parse_metric()`, `HnswIndex<T>::search`, "BruteForceIndex class"). A symbol
+    that is neither near nor enclosing still fails, so invented names are still caught.
