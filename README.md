@@ -175,7 +175,7 @@ fast_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openro
 strong_paid = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
 requests_per_minute = 20      # client-side throttle
 max_retries = 1               # per model (honors Retry-After) before falling back
-timeout_seconds = 180         # per request; slow answers aren't cut off
+timeout_seconds = 125         # per request; slow answers aren't cut off
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]
@@ -184,6 +184,7 @@ max_grade_loops = 2
 max_answer_retries = 2
 daily_call_budget = 1000
 expand_with_tools = true      # the model picks expand tools; false = deterministic heuristics
+combined_answer = false       # experimental: the answer call also grades (one LLM call fewer)
 
 [web]
 mode = "ask"                  # off | ask | auto
@@ -271,7 +272,8 @@ without a token scan. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
 accuracy, file hit rate (expected files among verified refs), retrieval recall@10 before any LLM step,
 first-try citation validity, debug file+line accuracy (top hypothesis and any), LLM calls per question,
 and p50/p95 latency. Ablations: `vector_only`, `ripgrep_only`, `hybrid`, `hybrid+loop` (default),
-`pinecone` vs `chroma` (retrieval recall only), or `all`; `--model …` runs the suite on one model with no fallbacks, to compare models.
+`combined` (the answer call also grades, see `limits.combined_answer`), `pinecone` vs `chroma`
+(retrieval recall only), or `all`. To compare the two designs: `haive eval --ablation hybrid+loop,combined`; `--model …` runs the suite on one model with no fallbacks, to compare models.
 
 Debug cases come from **bug injection into temp copies, never your repos**: `eval/inject_bugs.py` clones a
 repo, applies realistic bugs (wrong key, off-by-one, renamed env var, missing None check, bad import, …),

@@ -38,6 +38,9 @@ def make_grade(deps: Deps):
         if not deps.use_loop:
             ctx.detail = "sufficient (loop disabled by ablation)"
             return {"grade": {"status": "sufficient", "missing": [], "reason": "ablation"}}
+        if deps.combined:
+            ctx.detail = "sufficient (the answer call grades)"
+            return {"grade": {"status": "sufficient", "missing": [], "reason": "combined"}}
         if state.get("intent") == "history" and all(e.get("why") == HISTORY_WINDOW for e in evidence):
             # "what changed (in the last month)?": the evidence is exactly the commits asked for
             ctx.detail = "sufficient (history window)"

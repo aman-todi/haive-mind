@@ -83,7 +83,7 @@ class ModelsConfig(BaseModel):
     max_retries: int = 1  # per model, by the OpenAI client (honors Retry-After), before falling back
     # Per request. Generous so a slow answer isn't cut off just before it finishes; a hung request is
     # retried once, so the worst case is ~2x this before the next model in the list.
-    timeout_seconds: int = 180
+    timeout_seconds: int = 125
 
     @property
     def tier_name(self) -> str:
@@ -99,6 +99,9 @@ class LimitsConfig(BaseModel):
     max_answer_retries: int = 2
     daily_call_budget: int = 1000
     expand_with_tools: bool = True  # let the model pick expand tools (else deterministic heuristics)
+    # One LLM call grades and answers: the answer may ask for more evidence instead (experimental;
+    # compare with `haive eval --ablation hybrid+loop,combined`).
+    combined_answer: bool = False
 
 
 class WebConfig(BaseModel):

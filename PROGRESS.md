@@ -18,8 +18,10 @@ Status of the build against [docs/spec.md](docs/spec.md); design changes since t
 
 ## Open
 
-- **T15 hardening:** draft `eval/questions.yaml` from the author's repos (it is still the empty
-  template), run `haive eval --ablation all`, put the numbers in the README, and fix what they show.
+- **T15 hardening:** `eval/questions.yaml` has a first draft (19 questions over haive-mind, weatherpruf,
+  and hnsw-engine; some paths marked CHECK). Confirm it, add the other repos and debug cases, run
+  `haive eval --ablation hybrid+loop,combined`, put the numbers in the README, and fix what they show.
+- Decide whether `combined_answer` (grade and answer in one call) becomes the default, from that run.
 - Measure `ask` latency per tier over a question set (single runs so far: ~27 s paid fast/strong
   mix, ~60 s free).
 

@@ -10,4 +10,115 @@
 #   repos: [valuation-backend]
 #   expected_intent: lookup
 #   expected_files: [valuation-backend/app/valuation/dcf.py]
-[]
+
+# First draft (Claude Code, Oct 2026). Only haive-mind was readable from the cloud session; the
+# weatherpruf and hnsw-engine paths come from verified citations in real runs. Lines marked CHECK
+# should be confirmed against your checkout. Add questions for your other repos (auditbuddy,
+# intrinsic-valuation, technical-req-rag, ...) and debug cases from bug injection.
+# History questions cite commits (no file), so they leave expected_files empty and score intent only.
+
+# ---------------------------------------------------------------- lookup
+- id: lookup-haive-scope
+  question: Where does haive decide which repos a question is about?
+  repos: [haive-mind]
+  expected_intent: lookup
+  expected_files: [haive-mind/src/haive/graph/router.py]
+- id: lookup-haive-commit-check
+  question: How does haive check that a cited commit is real?
+  repos: [haive-mind]
+  expected_intent: lookup
+  expected_files: [haive-mind/src/haive/graph/verify.py]
+- id: lookup-haive-time-window
+  question: How are phrases like "in the last 2 weeks" turned into git log options?
+  repos: [haive-mind]
+  expected_intent: lookup
+  expected_files: [haive-mind/src/haive/graph/timewindow.py]
+- id: lookup-haive-budget
+  question: Where is the per-question LLM call budget enforced?
+  repos: [haive-mind]
+  expected_intent: lookup
+  expected_files: [haive-mind/src/haive/llm/budget.py]
+- id: lookup-weatherpruf-signup-cap
+  question: How does weatherpruf enforce the sign-up cap?
+  repos: [weatherpruf]
+  expected_intent: lookup
+  expected_files: [weatherpruf/backend/app/services/admission.py, weatherpruf/backend/app/api/deps.py]
+  notes: CHECK paths (from commit a90247e's file list)
+- id: lookup-weatherpruf-mcp-auth
+  question: Where does the MCP server validate OAuth tokens?
+  repos: [weatherpruf]
+  expected_intent: lookup
+  expected_files: [weatherpruf/backend/app/mcp_server/auth.py]
+  notes: CHECK path (from commit 8576406's file list)
+- id: lookup-hnsw-metrics
+  question: Which distance metrics does hnsw-engine support, and where are their names parsed?
+  repos: [hnsw-engine]
+  expected_intent: lookup
+  expected_files: [hnsw-engine/src/dispatch.cpp]
+- id: lookup-hnsw-bruteforce
+  question: What is the brute-force index in hnsw-engine for?
+  repos: [hnsw-engine]
+  expected_intent: lookup
+  expected_files: [hnsw-engine/include/hnsw/index.hpp]
+
+# ---------------------------------------------------------------- recall
+- id: recall-vector-search
+  question: How have I implemented vector search across my projects?
+  expected_intent: recall
+  expected_files: [hnsw-engine/include/hnsw/index.hpp, haive-mind/src/haive/store/base.py]
+- id: recall-oauth
+  question: How have I handled sign-in or OAuth before?
+  expected_intent: recall
+  expected_files: [weatherpruf/backend/app/mcp_server/auth.py]
+  notes: CHECK; add other repos' auth files if they have any
+- id: recall-env-config
+  question: How have I loaded settings and secrets from environment variables in my projects?
+  expected_intent: recall
+  expected_files: [haive-mind/src/haive/config.py, weatherpruf/backend/app/config.py]
+  notes: CHECK weatherpruf path (from commit a90247e's file list)
+
+# ---------------------------------------------------------------- history
+- id: history-commit-citations
+  question: When and why did haive start citing commits?
+  repos: [haive-mind]
+  expected_intent: history
+  notes: commit 65169b0 "Make commits citable; stop answer retries that aren't helping"
+- id: history-weatherpruf-landing
+  question: Why was a public landing page added to weatherpruf?
+  repos: [weatherpruf]
+  expected_intent: history
+  notes: commit 3e2b4ef (Google OAuth verification rejected a homepage behind a login)
+- id: history-weatherpruf-window
+  question: What changed in weatherpruf in the last 3 months?
+  repos: [weatherpruf]
+  expected_intent: history
+  notes: time-window path (no grader call); results depend on today's date
+
+# ---------------------------------------------------------------- compare
+- id: compare-retrieval
+  question: How do haive-mind and technical-req-rag differ in how they retrieve context?
+  expected_intent: compare
+  expected_files: [haive-mind/src/haive/graph/retrieve.py]
+  notes: add technical-req-rag's retrieval file
+- id: compare-vector-store
+  question: Compare how hnsw-engine and haive-mind store and search vectors
+  expected_intent: compare
+  expected_files: [hnsw-engine/include/hnsw/index.hpp, haive-mind/src/haive/store/base.py]
+
+# ---------------------------------------------------------------- architecture
+- id: architecture-haive
+  question: Break down the architecture of haive-mind
+  repos: [haive-mind]
+  expected_intent: architecture
+  expected_files: [haive-mind/README.md, haive-mind/docs/ARCHITECTURE.md, haive-mind/src/haive/graph/build.py]
+- id: architecture-weatherpruf-deploy
+  question: Break down how weatherpruf is deployed
+  repos: [weatherpruf]
+  expected_intent: architecture
+  expected_files: [weatherpruf/infra/README.md, weatherpruf/.github/workflows/deploy.yml]
+  notes: CHECK paths (from commits 7bb8367 and 60e4438)
+
+# ---------------------------------------------------------------- general
+- id: general-fastapi-pagination
+  question: How do I paginate results in a FastAPI endpoint?
+  expected_intent: general

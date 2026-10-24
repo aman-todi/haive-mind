@@ -88,6 +88,7 @@ class GraphState(TypedDict, total=False):
     bad_claims: dict[str, list[str]]
     answer_retries: int
     retry_answer: bool
+    answer_wants_more: bool  # combined mode: the answer asked for more evidence instead of answering
     first_verify: dict[str, int] | None
     title: str | None
     notices: Annotated[list[str], add_or_reset]
@@ -132,6 +133,7 @@ def turn_input(
         "bad_claims": {},
         "answer_retries": 0,
         "retry_answer": False,
+        "answer_wants_more": False,
         "first_verify": None,
         "notices": None,
         "node_log": None,
@@ -150,7 +152,7 @@ class Deps:
     web_search: Callable[[str], list[WebResult]] | None = None
     thread_id: str | None = None
     persist_thread: bool = False  # chat threads get titles and rows in `threads`
-    ablation: str = "hybrid+loop"  # vector_only | ripgrep_only | hybrid | hybrid+loop
+    ablation: str = "hybrid+loop"  # vector_only | ripgrep_only | hybrid | hybrid+loop | combined
     extra: dict[str, Any] = field(default_factory=dict)
 
     @cached_property
@@ -174,7 +176,12 @@ class Deps:
 
     @property
     def use_loop(self) -> bool:
-        return self.ablation == "hybrid+loop"
+        return self.ablation in ("hybrid+loop", "combined")
+
+    @property
+    def combined(self) -> bool:
+        """The answer call also grades (it may ask for more evidence); no separate grader call."""
+        return self.ablation == "combined" or self.cfg.limits.combined_answer
 
 
 @dataclass

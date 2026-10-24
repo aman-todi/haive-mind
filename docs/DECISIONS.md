@@ -237,3 +237,17 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     180 s and the client retries a failed request once (was twice), so a hung model costs at most
     ~6 min before the next model in the tier's list, instead of up to 9 min at 180 s with two retries.
     The cross-repo relevance cutoff (#41) is 0.7x the best repo's score, keeping more borderline repos.
+
+44. **Request timeout 125 s.** 180 s (#43) was more than needed: slow free-model answers in real runs
+    took up to ~60 s, and a hung request still costs ~2x the timeout. 125 s leaves room for a slow
+    answer to finish while bounding a hung model at ~4 min before the next one in the list.
+
+45. **Combined grade-and-answer, behind a setting.** With one model per question (#38), a separate
+    grader no longer buys a cheaper model's opinion, and it only sees abbreviated evidence. With
+    `limits.combined_answer` (or the eval ablation `combined`), the grader makes no LLM call (its
+    code checks remain), and the answer call may return `need_more` (missing symbols, more context, or
+    a web query) instead of an answer while expansion rounds and budget allow; haive then runs the same
+    expand / web paths and asks again. The option is not offered on verify retries or after the loop
+    is exhausted, so it can't loop. The nothing-relevant -> rewrite path is unchanged. Off by default
+    until `haive eval --ablation hybrid+loop,combined` on the author's suite shows it is at least as
+    good: it saves one call per question, but models lean toward answering with what they have.

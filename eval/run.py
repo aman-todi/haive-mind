@@ -23,7 +23,7 @@ from haive.tools.trace_parse import parse
 
 EVAL_DIR = Path(__file__).parent
 ROOT = EVAL_DIR.parent
-FULL_ABLATIONS = ["vector_only", "ripgrep_only", "hybrid", "hybrid+loop"]
+FULL_ABLATIONS = ["vector_only", "ripgrep_only", "hybrid", "hybrid+loop", "combined"]
 STORE_ABLATIONS = ["pinecone", "chroma"]
 README_START, README_END = "<!-- eval-results:start -->", "<!-- eval-results:end -->"
 COLUMNS = [

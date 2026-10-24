@@ -148,7 +148,9 @@ def build_graph(deps: Deps, checkpointer: Any = None):
     g.add_edge("to_general", "maybe_web")
     g.add_edge("web_grade", "maybe_web")
     g.add_conditional_edges("maybe_web", web_node.route_after_web, ["grade", "answer"])
-    g.add_edge("answer", "verify")
+    g.add_conditional_edges(
+        "answer", answer_mod.route_after_answer(route_grade), ["verify", "expand", "web_grade", "exhausted"]
+    )
     g.add_conditional_edges("verify", answer_mod.route_after_verify, ["answer", "finalize"])
     g.add_edge("finalize", END)
     return g.compile(checkpointer=checkpointer)
