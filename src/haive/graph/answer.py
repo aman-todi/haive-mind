@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
-
-from pydantic import BaseModel, Field
+from typing import Any
 
 from haive import prompts
 from haive.graph.state import Deps, GraphState, NodeCtx, history_messages, render_evidence
@@ -13,28 +11,6 @@ from haive.llm.budget import BudgetExceeded
 from haive.llm.models import LLMError
 from haive.llm.structured import structured
 from haive.types import Answer, Claim, CommitRef, Evidence, ParsedTrace, RepoRef, Section, WebResult
-
-
-class NeedMore(BaseModel):
-    status: Literal["missing_symbol", "need_context", "need_external"]
-    missing: list[str] = Field(default_factory=list, description="names, paths, path:line, or a web query")
-    reason: str = ""
-
-
-class AnswerOrMore(Answer):
-    """Combined mode: an answer, or (``need_more``) a request for more evidence first."""
-
-    need_more: NeedMore | None = Field(
-        default=None, description="set only if the evidence can't answer the core of the question"
-    )
-
-
-ASK_FOR_MORE = (
-    "If the evidence can't answer the core of the question, don't guess: set `need_more` instead, with "
-    "status missing_symbol (definitions to fetch: list the names), need_context (callers, a config file, "
-    "the rest of a file: list identifiers, paths, or path:line), or need_external (third-party behavior: "
-    "a web search query), and leave sections empty. Answer whenever the core is covered."
-)
 
 
 def render_web(results: list[dict[str, Any]]) -> str:
@@ -107,26 +83,18 @@ def make_answer(deps: Deps):
                 "unsupported claims to source 'model' with no refs.\n- "
                 + "\n- ".join(state["verify_errors"][:15])
             )
-        # Combined mode: this call may ask for more evidence, while loops and budget allow another answer.
-        may_ask = (
-            deps.combined
-            and not state.get("answer_retries")
-            and not state.get("low_confidence")  # set by `exhausted`: it must answer now
-            and state.get("loops", 0) < deps.cfg.limits.max_grade_loops
-            and deps.remaining(state) >= 3  # this call, an expand plan, and the final answer
-        )
         prompt = prompts.messages(
             "answer_common",
             template=template,
             intent=intent,
             question=state["question"],
             history=history_messages(state),
-            errors="\n\n".join(x for x in (errors, ASK_FOR_MORE if may_ask else "") if x),
+            errors=errors,
             evidence=render_evidence(state.get("evidence") or []),
             web=render_web(state.get("web_results") or []),
         )
         try:
-            a = structured(deps.llm, "answer", AnswerOrMore if may_ask else Answer, prompt, ctx.meter)
+            a = structured(deps.llm, "answer", Answer, prompt, ctx.meter)
         except (LLMError, BudgetExceeded) as e:
             ctx.detail = f"failed: {type(e).__name__}"
             a = fallback_answer(state, f"answer model failed: {type(e).__name__}")
@@ -135,19 +103,13 @@ def make_answer(deps: Deps):
                 "notices": [f"Answer model failed ({e.__class__.__name__})."],
                 "answer_retries": deps.cfg.limits.max_answer_retries,
             }
-        if isinstance(a, AnswerOrMore):
-            if a.need_more is not None:
-                more = a.need_more.model_dump()
-                ctx.detail = f"needs more: {more['status']} {more['missing'][:3]}"
-                return {"grade": more, "answer": None, "answer_wants_more": True}
-            a = Answer.model_validate(a.model_dump(exclude={"need_more"}))
         if intent != "debug":
             a.hypotheses = None
             a.suggested_fix = None
         elif a.suggested_fix is not None:
             a.suggested_fix.approximate = False
         ctx.detail = f"{len(a.all_claims())} claims"
-        return {"answer": a.model_dump(), "answer_wants_more": False}
+        return {"answer": a.model_dump()}
 
     return answer
 
@@ -164,6 +126,7 @@ def make_verify(deps: Deps):
         update: dict[str, Any] = {"verify_errors": res.errors, "bad_claims": res.bad_claims}
         if a.suggested_fix is not None:
             a.suggested_fix.approximate = res.approximate_fix
+        if a.suggested_fix is not None or res.relabeled:
             update["answer"] = a.model_dump()
         if state.get("answer_retries", 0) == 0:
             keys = claim_keys(a)
@@ -185,27 +148,14 @@ def make_verify(deps: Deps):
         update["retry_answer"] = retry
         if retry:
             update["answer_retries"] = retries + 1
-        ctx.detail = f"{len(res.bad_claims)} bad claims; retry={retry}" + ("; no progress" if stuck else "")
+        ctx.detail = (
+            f"{len(res.bad_claims)} bad claims; retry={retry}"
+            + ("; no progress" if stuck else "")
+            + (f"; {res.relabeled} relabeled" if res.relabeled else "")
+        )
         return update
 
     return verify_node
-
-
-def route_after_answer(route_grade):
-    """Combined mode: an answer that asked for more goes down the grader's routes (expand, web, or
-    exhausted, which answers anyway); anything else is verified."""
-
-    def route(state: GraphState) -> str:
-        if state.get("answer_wants_more") and state.get("answer") is None:
-            dest = route_grade(state)
-            return (
-                {"web": "web_grade"}.get(dest, dest)
-                if dest in ("expand", "web", "exhausted")
-                else "exhausted"
-            )
-        return "verify"
-
-    return route
 
 
 def route_after_verify(state: GraphState) -> str:

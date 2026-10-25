@@ -12,6 +12,8 @@ from haive.tools.files import FileAccessError, file_lines
 from haive.types import Answer, Claim, CommitRef, Evidence, RepoRef, WebRef, WebResult
 
 SYMBOL_SLACK = 3
+DOC_REACH = 40  # lines a doc comment may run past the cited range before the definition it documents
+COMMENT_STARTS = ("#", "//", "/*", "*", '"""', "'''")
 EMPTY_ANSWER = "answer"  # bad_claims key for an answer with no claims despite evidence
 MIN_SHA = 7
 
@@ -21,6 +23,7 @@ class VerifyResult:
     errors: list[str] = field(default_factory=list)
     bad_claims: dict[str, list[str]] = field(default_factory=dict)  # claim key -> errors
     approximate_fix: bool = False
+    relabeled: int = 0  # claims whose source was corrected to match their refs
 
     @property
     def ok(self) -> bool:
@@ -81,14 +84,26 @@ def enclosing_headers(lines: list[str], start_line: int, max_up: int = 2000) -> 
         ln = lines[k]
         stripped = ln.lstrip()
         # comments and decorators aren't headers; a line opening with a closing bracket ends a multi-line
-        # signature (``) -> X:``) or an earlier block (``}``), so the header is further up
-        if not stripped or stripped.startswith(("#", "//", "/*", "*", "@", ")", "]", "}")):
+        # signature (``) -> X:``) or an earlier block (``}``), so the header is further up; a lone ``{``
+        # opens the block of the signature above it (C#/Java brace style)
+        if not stripped or stripped.startswith(("#", "//", "/*", "*", "@", ")", "]", "}")) or stripped == "{":
             continue
         k_indent = len(ln) - len(stripped)
         if k_indent < indent:
             out.append(ln)
             indent = k_indent
     return out
+
+
+def documented_definition(lines: list[str], end_line: int, max_down: int = DOC_REACH) -> str | None:
+    """The first code line after a doc comment that the cited range ends inside or just before, so a
+    claim citing a docstring (``/** ... */``, ``///``) may name the function it documents."""
+    for k in range(end_line, min(len(lines), end_line + max_down)):
+        stripped = lines[k].strip()
+        if not stripped or stripped.startswith((*COMMENT_STARTS, "@", "[")) or stripped.endswith("*/"):
+            continue
+        return lines[k]
+    return None
 
 
 def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, str]]) -> list[str]:
@@ -107,7 +122,12 @@ def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, 
         name = symbol_name(ref.symbol)
         near = any(name in ln for ln in lines[lo:hi])
         word = re.compile(rf"\b{re.escape(name)}\b")
-        if not near and not any(word.search(h) for h in enclosing_headers(lines, ref.start_line)):
+        documented = documented_definition(lines, ref.end_line)
+        if (
+            not near
+            and not any(word.search(h) for h in enclosing_headers(lines, ref.start_line))
+            and not (documented and word.search(documented))
+        ):
             errs.append(
                 f"{loc}: symbol '{ref.symbol}' is neither in the cited lines nor a definition around them"
             )
@@ -210,14 +230,40 @@ def check_diff(diff: str, lines_: _Lines, default: tuple[str, str] | None) -> bo
     return True
 
 
+def settle_sources(answer: Answer, check) -> int:
+    """Relabel claims whose source contradicts their refs, in place, instead of sending them back: a
+    repo claim with no refs is the model's own statement, and a model claim whose refs check out is a
+    repo claim (if they don't, the refs are dropped). An answer that cites nothing at all is left as is,
+    so verification still asks for citations. Returns how many claims changed."""
+    keys = claim_keys(answer)
+    if not any(c.refs for _, c in keys):
+        return 0
+    changed = 0
+    for _, c in keys:
+        if c.source == "repo" and not c.refs:
+            c.source, changed = "model", changed + 1
+        elif c.source == "model" and c.refs:
+            if all(isinstance(r, (RepoRef, CommitRef)) for r in c.refs) and not check(
+                c.model_copy(update={"source": "repo"})
+            ):
+                c.source = "repo"
+            else:
+                c.refs = []
+            changed += 1
+    return changed
+
+
 def verify(
     answer: Answer, evidence: list[Evidence], web_results: list[WebResult], roots: dict[str, Path]
 ) -> VerifyResult:
+    """Check every claim; claims whose source contradicts their refs are relabeled first (in place,
+    see ``settle_sources``)."""
     res = VerifyResult()
     lines_ = _Lines(roots)
     ev_paths = {(e.repo, e.path) for e in evidence if e.repo and e.path}
     ev_commits = {(e.repo, e.sha) for e in evidence if e.repo and e.sha}
     urls = {w.url for w in web_results}
+    res.relabeled = settle_sources(answer, lambda c: check_claim(c, lines_, ev_paths, urls, ev_commits))
     keys = claim_keys(answer)
     if not keys and (evidence or web_results):
         msg = (

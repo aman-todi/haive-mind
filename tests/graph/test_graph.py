@@ -825,45 +825,6 @@ def test_follow_up_is_rewritten_to_stand_alone(cfg, db, store):
     assert any(e.get("symbol") == "discount" or "discount" in e["text"] for e in res.state["evidence"])
 
 
-def test_combined_mode_answers_in_one_call(cfg, db, store):
-    cfg.limits.combined_answer = True
-    r, fake = make_runner(
-        cfg,
-        db,
-        store,
-        {"RouterOutput": [router(identifiers=["choose_method"])], "AnswerOrMore": [answer(DCF_CLAIM)]},
-    )
-    res = r.run(Q, thread_id="t")
-    assert fake.calls == ["RouterOutput", "AnswerOrMore"]  # no grader call
-    assert not res.answer.all_claims()[0].unverified and res.state["llm_calls"] == 2
-
-
-def test_combined_mode_answer_can_ask_for_more_then_answers(cfg, db, store):
-    cfg.limits.combined_answer = True
-    more = {
-        "summary": "",
-        "sections": [],
-        "need_more": {"status": "missing_symbol", "missing": ["choose_method"]},
-    }
-    r, fake = make_runner(
-        cfg,
-        db,
-        store,
-        {
-            "RouterOutput": [router(identifiers=["create_valuation"])],
-            "AnswerOrMore": [more],
-            "Answer": [answer(DCF_CLAIM)],  # second try: may not ask again (one loop left is spent)
-        },
-    )
-    cfg.limits.max_grade_loops = 1
-    res = r.run("How does create_valuation work?", thread_id="t")
-    ns = nodes(res)
-    assert ns[ns.index("answer") : ns.index("answer") + 4] == ["answer", "expand", "grade", "answer"]
-    assert any("definition of choose_method" in e["why"] for e in res.state["evidence"])
-    assert fake.calls.count("AnswerOrMore") == 1 and fake.calls.count("Answer") == 1
-    assert "GradeOutput" not in fake.calls and res.answer.all_claims()
-
-
 def test_explicit_scope_never_routes_to_general(cfg, db, store):
     r, _ = make_runner(
         cfg,

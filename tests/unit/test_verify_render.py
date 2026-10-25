@@ -47,9 +47,33 @@ def test_invalid_claims(sample_repo):
         Claim(text="unknown repo", source="repo", refs=[ref(repo="zzz")]),
     )
     r = verify(a, ev(), [], {"v": sample_repo})
-    assert set(r.bad_claims) == {f"s0.c{i}" for i in range(8)}
+    assert set(r.bad_claims) == {f"s0.c{i}" for i in (1, 2, 3, 4, 5, 7)}
     assert any("not among the retrieved evidence" in e for e in r.errors)
     assert any("symbol 'other_fn'" in e for e in r.errors)
+    # the uncited repo claim and the cited model claim were relabeled instead of sent back
+    assert r.relabeled == 2 and a.sections[0].claims[0].source == "model"
+    assert a.sections[0].claims[6].source == "repo"
+
+
+def test_sources_are_relabeled_to_match_refs(sample_repo):
+    a = ans(
+        Claim(text="cited", source="repo", refs=[ref()]),
+        Claim(text="the profile says", source="repo"),
+        Claim(text="checks out", source="model", refs=[ref()]),
+        Claim(text="does not", source="model", refs=[ref(symbol="other_fn")]),
+    )
+    r = verify(a, ev(), [], {"v": sample_repo})
+    assert r.ok and r.relabeled == 3, r.errors
+    assert [(c.source, len(c.refs)) for c in a.all_claims()] == [
+        ("repo", 1),
+        ("model", 0),
+        ("repo", 1),
+        ("model", 0),
+    ]
+    # an answer that cites nothing at all is still sent back for citations
+    bare = ans(Claim(text="a", source="repo"), Claim(text="b", source="repo"))
+    r = verify(bare, ev(), [], {"v": sample_repo})
+    assert len(r.bad_claims) == 2 and r.relabeled == 0
 
 
 def test_symbol_slack(sample_repo):
@@ -156,3 +180,49 @@ def test_symbol_may_be_the_definition_enclosing_the_cited_lines(tmp_path):
     assert "neither in the cited lines nor a definition around them" in errs(13, 15, "check_everything")[0]
     assert symbol_name("HnswIndex<T>::search") == "search"
     assert symbol_name("BruteForceIndex class") == "BruteForceIndex"
+
+
+def test_symbol_after_allman_braces_and_on_documented_definitions(tmp_path):
+    from haive.graph.verify import _Lines, check_repo_ref
+
+    (tmp_path / "C.cs").write_text(
+        "namespace App\n"
+        "{\n"
+        "    public class UserController\n"
+        "    {\n"
+        '        [HttpGet("me")]\n'
+        "        public IActionResult Me()\n"
+        "        {\n"
+        "            var name = User.Identity?.Name;\n"
+        "            var ok = name != null;\n"
+        "            var roles = new List<string>();\n"
+        "            var claims = User.Claims;\n"
+        "            return Ok(new { ok, name, roles, claims });\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    (tmp_path / "oauth.ts").write_text(
+        "/**\n"
+        " * The single redirect target for both sign-in methods.\n"
+        " * Magic links land here, and so do OAuth callbacks.\n"
+        " * It reads the stored return path.\n"
+        " * Falls back to the home page.\n"
+        " * Never redirects off-site.\n"
+        " */\n"
+        "export function postLoginRedirect(): string {\n"
+        "  return '/';\n"
+        "}\n"
+    )
+    lines = _Lines({"r": tmp_path})
+    ev = {("r", "C.cs"), ("r", "oauth.ts")}
+
+    def errs(path, start, end, symbol):
+        return check_repo_ref(
+            RepoRef(repo="r", path=path, start_line=start, end_line=end, symbol=symbol), lines, ev
+        )
+
+    assert not errs("C.cs", 10, 12, "Me")  # the method above a lone `{`
+    assert not errs("C.cs", 10, 12, "UserController")
+    assert not errs("oauth.ts", 2, 3, "postLoginRedirect")  # its doc comment
+    assert errs("oauth.ts", 2, 3, "completeSignIn")

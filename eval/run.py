@@ -23,7 +23,7 @@ from haive.tools.trace_parse import parse
 
 EVAL_DIR = Path(__file__).parent
 ROOT = EVAL_DIR.parent
-FULL_ABLATIONS = ["vector_only", "ripgrep_only", "hybrid", "hybrid+loop", "combined"]
+FULL_ABLATIONS = ["vector_only", "ripgrep_only", "hybrid", "hybrid+loop"]
 STORE_ABLATIONS = ["pinecone", "chroma"]
 README_START, README_END = "<!-- eval-results:start -->", "<!-- eval-results:end -->"
 COLUMNS = [
@@ -100,7 +100,7 @@ def retrieved_files(rt, q: dict[str, Any], ablation: str, store=None) -> list[tu
         store = store or rt.store
         hits = store.search(text or "code", 10, {"repo": scope, "kind": ["code", "config", "doc"]})
         vec = [(h.repo, h.path) for h in hits]
-    # Like retrieve.lookup (combined retrieves the same): ripgrep on code names first, plain-word
+    # Like retrieve.lookup: ripgrep on code names first, plain-word
     # matches after the vector hits.
     files += rg + vec if code else vec + rg
     return list(dict.fromkeys(files))

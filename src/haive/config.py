@@ -99,9 +99,6 @@ class LimitsConfig(BaseModel):
     max_answer_retries: int = 2
     daily_call_budget: int = 1000
     expand_with_tools: bool = True  # let the model pick expand tools (else deterministic heuristics)
-    # One LLM call grades and answers: the answer may ask for more evidence instead (experimental;
-    # compare with `haive eval --ablation hybrid+loop,combined`).
-    combined_answer: bool = False
 
 
 class WebConfig(BaseModel):

@@ -124,7 +124,8 @@ def fmt(key: str, v: Any) -> str:
 # First-try verification errors (graph/verify.py messages) grouped into kinds, to see what to fix.
 ERROR_KINDS = [
     ("line range invalid", "line range outside the file"),
-    ("not found within the cited lines", "symbol not in the cited lines"),
+    ("is neither in the cited lines", "symbol not in the cited lines"),
+    ("repo claim needs at least one", "answer cites nothing"),
     ("path was not among the retrieved evidence", "file not in the evidence"),
     ("does not exist in the working tree", "file does not exist"),
     ("unknown repo", "unknown repo"),

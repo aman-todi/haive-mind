@@ -165,10 +165,6 @@ def test_eval_on_sample(monkeypatch, tmp_path):
     assert "first_errors" in rows[0]  # first-try verification errors, per question
     assert by_id["lookup-choose-method"]["recall10"] == "True"
     assert by_id["debug-missing-key"]["recall10"] == "True"  # trace frames map to the bug repo
-    from eval.run import retrieved_files
-
-    for q in questions[:4]:  # the two designs share retrieval, so recall@10 must not differ
-        assert retrieved_files(rt, q, "combined") == retrieved_files(rt, q, "hybrid+loop")
     print(summary)
     # the sample source repo is never modified by bug injection or eval runs
     assert (
