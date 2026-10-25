@@ -47,12 +47,15 @@ err = Console(stderr=True)
 RepoOpt = Annotated[list[str] | None, typer.Option("--repo", "-r", help="Limit to a repo (repeatable).")]
 GroupOpt = Annotated[list[str] | None, typer.Option("--group", "-g", help="Limit to a group (repeatable).")]
 PaidOpt = Annotated[
-    bool, typer.Option("--paid", help="Use the paid model list for this command (models.*_paid).")
+    bool | None,
+    typer.Option(
+        "--paid/--free", help="Use the paid or free model lists for this command (default: models.use_paid)."
+    ),
 ]
 TierOpt = Annotated[
     bool | None,
     typer.Option(
-        "--strong/--fast", help="Use the strong or fast model list for this command (default: models.tier)."
+        "--ultra/--strong", help="Use the ultra or strong model list for this command (default: models.tier)."
     ),
 ]
 WebOpt = Annotated[
@@ -592,9 +595,10 @@ def status() -> None:
     console.print("\n[bold]Models[/]")
     m = cfg.models
     console.print(
-        f"  default: {m.tier}, {'paid' if m.use_paid else 'free'} (override per command with --strong/--fast, --paid)"
+        f"  default: {m.tier}, {'paid' if m.use_paid else 'free'}"
+        " (override per command with --strong/--ultra, --paid/--free)"
     )
-    for name in ("fast", "strong", "fast_paid", "strong_paid"):
+    for name in m.TIERS:
         mark = "  [green](in use)[/]" if name == m.tier_name else ""
         console.print(f"  {name}: {' → '.join(getattr(m, name))}{mark}")
     console.print(f"  endpoint: {m.base_url}")
@@ -683,12 +687,12 @@ def _show(result: Any, as_json: bool, trace: bool) -> None:
         render_trace(console, result.state.get("node_log") or [])
 
 
-def _choose_models(rt: Any, paid: bool, strong: bool | None) -> None:
+def _choose_models(rt: Any, paid: bool | None, ultra: bool | None) -> None:
     """Per-command overrides of the configured tier; one list then serves every step of the question."""
-    if paid:
-        rt.cfg.models.use_paid = True
-    if strong is not None:
-        rt.cfg.models.tier = "strong" if strong else "fast"
+    if paid is not None:
+        rt.cfg.models.use_paid = paid
+    if ultra is not None:
+        rt.cfg.models.tier = "ultra" if ultra else "strong"
 
 
 def _one_shot(
@@ -700,12 +704,12 @@ def _one_shot(
     trace: bool,
     force: bool,
     interactive: bool,
-    paid: bool = False,
-    strong: bool | None = None,
+    paid: bool | None = None,
+    ultra: bool | None = None,
 ) -> None:
     rt = runtime()
     _budget_gate(rt, force)
-    _choose_models(rt, paid, strong)
+    _choose_models(rt, paid, ultra)
     runner = rt.runner()
     tid = f"oneshot-{uuid.uuid4().hex}"
     try:
@@ -735,12 +739,12 @@ def ask(
     as_json: Annotated[bool, typer.Option("--json", help="Print the structured answer as JSON.")] = False,
     trace: Annotated[bool, typer.Option("--trace", help="Show the path through the graph.")] = False,
     force: Annotated[bool, typer.Option("--force", help="Ignore the daily call budget.")] = False,
-    paid: PaidOpt = False,
-    strong: TierOpt = None,
+    paid: PaidOpt = None,
+    ultra: TierOpt = None,
 ) -> None:
     """Ask a question about your repos."""
     interactive = sys.stdin.isatty() and sys.stderr.isatty() and not as_json
-    _one_shot(question, None, _scope(repo, group), web, as_json, trace, force, interactive, paid, strong)
+    _one_shot(question, None, _scope(repo, group), web, as_json, trace, force, interactive, paid, ultra)
 
 
 @app.command()
@@ -755,8 +759,8 @@ def debug(
     as_json: Annotated[bool, typer.Option("--json")] = False,
     trace: Annotated[bool, typer.Option("--trace")] = False,
     force: Annotated[bool, typer.Option("--force")] = False,
-    paid: PaidOpt = False,
-    strong: TierOpt = None,
+    paid: PaidOpt = None,
+    ultra: TierOpt = None,
 ) -> None:
     """Diagnose an error trace and recommend a fix (never applied)."""
     from_stdin = file in (None, "-")
@@ -772,7 +776,7 @@ def debug(
     if not text.strip():
         fail("no trace text given")
     interactive = not from_stdin and sys.stdin.isatty() and sys.stderr.isatty() and not as_json
-    _one_shot(question, text, _scope(repo, group), web, as_json, trace, force, interactive, paid, strong)
+    _one_shot(question, text, _scope(repo, group), web, as_json, trace, force, interactive, paid, ultra)
 
 
 # ================================================================== chat
@@ -843,8 +847,8 @@ def chat(
     group: GroupOpt = None,
     web: WebOpt = None,
     force: Annotated[bool, typer.Option("--force")] = False,
-    paid: PaidOpt = False,
-    strong: TierOpt = None,
+    paid: PaidOpt = None,
+    ultra: TierOpt = None,
 ) -> None:
     """Interactive chat with saved, titled, resumable threads."""
     from haive.render import render_answer
@@ -852,7 +856,7 @@ def chat(
 
     rt = runtime()
     _budget_gate(rt, force)
-    _choose_models(rt, paid, strong)
+    _choose_models(rt, paid, ultra)
     runner = rt.runner(persist_thread=True)
     scope = _scope(repo, group)
     web_mode = _web_mode(web) or rt.cfg.web.mode
@@ -988,6 +992,8 @@ def eval_cmd(
         typer.Option("--model", help="Run on this one model only (no fallbacks), to compare models."),
     ] = None,
     limit: Annotated[int | None, typer.Option("--limit", help="Only the first N questions.")] = None,
+    paid: PaidOpt = None,
+    ultra: TierOpt = None,
     setup_sample: Annotated[
         bool, typer.Option("--setup-sample", help="Build and register the bundled sample repos + bug cases.")
     ] = False,
@@ -999,6 +1005,8 @@ def eval_cmd(
     sys.path.insert(0, str(root))
     from eval.run import main as eval_main
 
+    rt = runtime()
+    _choose_models(rt, paid, ultra)
     t0 = time.monotonic()
     try:
         out = eval_main(
@@ -1007,7 +1015,7 @@ def eval_cmd(
             model=model,
             limit=limit,
             console=console,
-            runtime=runtime(),
+            runtime=rt,
             setup_sample=setup_sample,
         )
     except ValueError as e:

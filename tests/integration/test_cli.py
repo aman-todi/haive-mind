@@ -242,15 +242,17 @@ def test_add_validation(cli, sample_repo, tmp_path):
 def test_tier_flags_pick_one_model_list(cli, sample_repo):
     setup_repo(cli, sample_repo)
     q = "Where does the DCF choose a valuation method?"
-    fast_paid, strong_paid = "deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4-pro-0813"
+    strong_paid, ultra_paid = "deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4-pro-0813"
     cli("ask", q, "--json")
-    assert fast_paid not in cli.built and strong_paid not in cli.built
-    cli("ask", q, "--json", "--paid")
-    assert fast_paid in cli.built and strong_paid not in cli.built  # every step on the fast paid list
-    cli("ask", q, "--json", "--paid", "--strong")
-    assert strong_paid in cli.built
+    assert strong_paid in cli.built and ultra_paid not in cli.built  # default: every step on strong, paid
+    cli.built.clear()
+    cli("ask", q, "--json", "--free")
+    assert strong_paid not in cli.built and ultra_paid not in cli.built
+    assert "nvidia/nemotron-3.5-super-vl:free" in cli.built
+    cli("ask", q, "--json", "--ultra")
+    assert ultra_paid in cli.built
     status = cli("status").output
-    assert "default: fast, free" in status and "fast: nvidia/nemotron-3-super-120b-a12b:free → " in status
+    assert "default: strong, paid" in status and "strong: nvidia/nemotron-3.5-super-vl:free → " in status
 
 
 def test_batch_add_scan_and_multiple_paths(cli, sample_repo, other_repo, tmp_path):

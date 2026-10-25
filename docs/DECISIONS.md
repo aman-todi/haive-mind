@@ -292,3 +292,31 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     folder is called), with a line saying so; adding it by path still works for people developing
     haive. The author unregisters it (`haive remove haive-mind`), and the eval suite no longer has
     questions about it.
+
+51. **Combined grade-and-answer is removed.** The full 19-question paid run settled #45: combined
+    made 2.4 LLM calls a question against 3.4, but the calls it saves are grader calls (short
+    evidence, short reply, about a tenth of a cent), median latency didn't move (14.5 s vs 14.7 s),
+    p95 more than doubled (111 s vs 49 s: each "need more" round redoes a full answer call), one
+    expected file was missed, and one answer came back with no claims. With the free 5-question run
+    (#46) also worse, the setting, its answer schema, the graph route, and the eval ablation are gone.
+
+52. **Claims are relabeled to match their refs instead of retried.** In the same run, most "wrong
+    citation type" failures were repo claims with no refs (statements from the repo profile, or "no
+    CI files appear in the evidence") or the reverse. Verification now relabels an uncited repo claim
+    as `model` (which it is), and a cited model claim as `repo` when its refs pass (else its refs are
+    dropped), saving the retry call without overstating anything. An answer that cites nothing at all
+    is still sent back, since a lookup answer with no citations is the failure verification exists
+    to catch. Two symbol-check gaps from the same run are closed: a lone `{` line (C#/Java brace
+    style) no longer hides the method or class above it, and a claim citing a doc comment may name
+    the definition that comment documents. The eval had also been counting every symbol failure as
+    "wrong citation type" since #49 changed the message's wording; fixed.
+
+53. **Paid is the default; tiers are strong and ultra.** Free and paid were about equally accurate on
+    the suite, but paid answered in 13.5 s at the median against 63 s free (p95 29 s vs 176 s) for
+    about 1-2 cents for all 19 questions. `use_paid` now defaults to true, and `--free` opts out per
+    command. The tiers are renamed: `fast` becomes `strong` (the default) and `strong` becomes `ultra`,
+    each with a `_paid` list; flags are `--strong/--ultra` and `--paid/--free`, on `ask`, `debug`,
+    `chat`, and now `eval`. In the free strong list, Nemotron 3 Super (0% uptime over a day on
+    OpenRouter in late October) is replaced by its successor Nemotron 3.5 Super VL, and MiniMax M3.1
+    Flash (its free variant was delisted) by Gemma 4 26B A4B, a faster MoE than the dense 31B with
+    similar scores. The ultra and paid lists showed ~100% provider uptime and are unchanged.

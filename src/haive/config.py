@@ -6,7 +6,7 @@ import difflib
 import os
 import tomllib
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 import tomli_w
 from pydantic import BaseModel, Field
@@ -48,17 +48,19 @@ class ModelsConfig(BaseModel):
     """One model answers every step of a question (router, grader, expand, answer, ...). Each tier is
     an ordered list: the first model that works is used, the rest are fallbacks."""
 
-    tier: Literal["fast", "strong"] = "fast"  # default; --strong / --fast override per command
-    use_paid: bool = False  # default; --paid overrides per command
-    fast: list[str] = Field(
+    tier: Literal["strong", "ultra"] = "strong"  # default; --strong / --ultra override per command
+    # default; --paid / --free override per command. Paid answers in ~14 s for well under a cent a
+    # question; free is ~4.5x slower (p50 ~60 s) at about the same accuracy (README, Models).
+    use_paid: bool = True
+    strong: list[str] = Field(
         default_factory=lambda: [
-            "nvidia/nemotron-3-super-120b-a12b:free",
-            "minimax/minimax-m3.1-flash:free",
+            "nvidia/nemotron-3.5-super-vl:free",
+            "google/gemma-4-26b-a4b-it:free",
             "google/gemma-4-31b-it:free",
             "openrouter/free",
         ]
     )
-    strong: list[str] = Field(
+    ultra: list[str] = Field(
         default_factory=lambda: [
             "nvidia/nemotron-3-ultra-550b-a55b:free",
             "thinkingmachines/inkling:free",
@@ -66,14 +68,14 @@ class ModelsConfig(BaseModel):
             "openrouter/free",
         ]
     )
-    fast_paid: list[str] = Field(
+    strong_paid: list[str] = Field(
         default_factory=lambda: [
             "deepseek/deepseek-v4.1-flash-1017",
             "openai/gpt-oss-120b",
             "openrouter/auto",
         ]
     )
-    strong_paid: list[str] = Field(
+    ultra_paid: list[str] = Field(
         default_factory=lambda: ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
     )
     base_url: str = "https://openrouter.ai/api/v1"
@@ -84,6 +86,8 @@ class ModelsConfig(BaseModel):
     # Per request. Generous so a slow answer isn't cut off just before it finishes; a hung request is
     # retried once, so the worst case is ~2x this before the next model in the list.
     timeout_seconds: int = 125
+
+    TIERS: ClassVar[tuple[str, ...]] = ("strong", "ultra", "strong_paid", "ultra_paid")
 
     @property
     def tier_name(self) -> str:

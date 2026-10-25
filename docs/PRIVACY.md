@@ -18,12 +18,12 @@ All of this is in haive's data dir: `~/Library/Application Support/haive/` on ma
 
 | Destination | What | When |
 |---|---|---|
-| **LLM provider** (OpenRouter by default) | Your question, recent chat turns, and the code/config/doc snippets, commit messages, and trace text retrieved for it | Every question (router, grader, expand planner, answer, titles). With `--paid`, all of these go to the paid models' provider |
+| **LLM provider** (OpenRouter by default) | Your question, recent chat turns, and the code/config/doc snippets, commit messages, and trace text retrieved for it | Every question (router, grader, expand planner, answer, titles). By default these go to the paid models' providers; with `--free`, to free-model providers, some of which may log or train on prompts |
 | **Pinecone** (default store) | Vectors plus chunk text and metadata (repo, path, symbol, lines) for everything indexed | `haive index` and freshness re-indexing |
 | **Web search** (DuckDuckGo or Tavily) | A search query, which may include an error message fragment or a library name | Only when web mode allows (`ask` asks first; `off` never) |
 | **GitHub / your git host** | Normal git traffic | `haive add <url>` (clone) and `haive sync` (pull) |
 
-### Free models on OpenRouter
+### Free models on OpenRouter (`--free`)
 
 Free models are served by third-party providers whose data policies vary: **some may log prompts or
 use them for training.** Since your code goes into prompts, review your OpenRouter privacy settings
