@@ -287,3 +287,15 @@ def test_clarify_prompt_accepts_number_or_text(monkeypatch):
     for typed, expected in [("2", "answers"), ("the CLI", "the CLI"), ("", ""), ("9", "9")]:
         monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *a, typed=typed, **kw: typed)
         assert cli_mod._on_interrupt(payload) == expected
+
+
+def test_scan_skips_haives_own_checkout(cli, sample_repo, tmp_path):
+    tool = tmp_path / "my-haive-clone"  # detected by its pyproject, whatever the folder is called
+    tool.mkdir()
+    (tool / "pyproject.toml").write_text('[project]\nname = "haive-mind"\n')
+    subprocess.run(["git", "init", "-q", str(tool)], check=True)
+    cli("init", "--no-check", "--backend", "chroma")
+    out = cli("add", "--scan", str(tmp_path)).output
+    assert "skipped" in out and "haive's own source" in out and "my-haive-clone" not in load_config().repos
+    out = cli("add", str(tool)).output  # explicitly, by path: allowed (for people developing haive)
+    assert "added my-haive-clone" in out

@@ -252,22 +252,35 @@ def _register(rt: Any, source: str, name: str | None, groups: list[str]) -> str:
     return name
 
 
-def _scan(directory: str) -> tuple[list[str], int]:
-    """Git repos directly inside ``directory`` (sorted), and how many other folders were passed over."""
+def is_haive_checkout(root: Path) -> bool:
+    """haive's own source tree (any folder name): its pyproject declares the haive-mind project."""
+    import tomllib
+
+    try:
+        data = tomllib.loads((root / "pyproject.toml").read_text())
+    except (OSError, ValueError):
+        return False
+    return data.get("project", {}).get("name") == "haive-mind"
+
+
+def _scan(directory: str) -> tuple[list[str], int, list[str]]:
+    """Git repos directly inside ``directory`` (sorted), how many other folders were passed over, and
+    haive checkouts left out: a clone of the tool is how you run haive, not code to ask about, and
+    indexing it puts its eval answer key and original spec into answers. Add it by path to include it."""
     from haive.tools import git
 
     base = Path(directory).expanduser().resolve()
     if not base.is_dir():
         fail(f"{base} is not a directory")
-    repos, others = [], 0
+    repos, others, tool = [], 0, []
     for child in sorted(base.iterdir()):
         if not child.is_dir() or child.name.startswith("."):
             continue
         if (child / ".git").exists() and git.is_repo(child):
-            repos.append(str(child))
+            (tool if is_haive_checkout(child) else repos).append(str(child))
         else:
             others += 1
-    return repos, others
+    return repos, others, tool
 
 
 @app.command()
@@ -293,11 +306,15 @@ def add(
     groups = group or []
     targets: list[str] = []
     passed_over = 0
+    tool_checkouts: list[str] = []
     if scan:
         for d in sources:
-            found, others = _scan(d)
+            found, others, tool = _scan(d)
             targets += found
             passed_over += others
+            tool_checkouts += tool
+        for t in tool_checkouts:
+            console.print(f"[dim]- skipped {escape(t)}: haive's own source (add it by path to index it)[/]")
         if not targets:
             fail(f"no git repositories found directly inside {', '.join(sources)}")
     else:

@@ -11,33 +11,33 @@
 #   expected_intent: lookup
 #   expected_files: [valuation-backend/app/valuation/dcf.py]
 
-# First draft (Claude Code, Oct 2026). Only haive-mind was readable from the cloud session; the
-# weatherpruf and hnsw-engine paths come from verified citations in real runs. Lines marked CHECK
-# should be confirmed against your checkout. Add questions for your other repos (auditbuddy,
-# intrinsic-valuation, technical-req-rag, ...) and debug cases from bug injection.
+# Draft by Claude Code (Oct 2026). Expected files come from citations that passed verification in
+# real runs; lines marked CHECK came from commit file lists and should be confirmed. haive-mind
+# itself is not indexed (`haive add --scan` skips it), so no questions are about it. Add questions
+# for your other repos (auditbuddy, earnings-call-analysis, ...) and debug cases from bug injection.
 # History questions cite commits (no file), so they leave expected_files empty and score intent only.
 
 # ---------------------------------------------------------------- lookup
-- id: lookup-haive-scope
-  question: Where does haive decide which repos a question is about?
-  repos: [haive-mind]
+- id: lookup-iv-signin
+  question: How does intrinsic-valuation complete the sign-in redirect?
+  repos: [intrinsic-valuation]
   expected_intent: lookup
-  expected_files: [haive-mind/src/haive/graph/router.py]
-- id: lookup-haive-commit-check
-  question: Which function in haive-mind verifies the citations in an answer?
-  repos: [haive-mind]
+  expected_files: [intrinsic-valuation/frontend/lib/auth.ts, intrinsic-valuation/frontend/app/auth/callback/page.tsx]
+- id: lookup-trr-current-user
+  question: How does technical-req-rag know who the signed-in user is?
+  repos: [technical-req-rag]
   expected_intent: lookup
-  expected_files: [haive-mind/src/haive/graph/verify.py]
-- id: lookup-haive-time-window
-  question: Where does haive-mind parse time windows such as "last 2 weeks" out of a question?
-  repos: [haive-mind]
+  expected_files: [technical-req-rag/src/Server/Controllers/UserController.cs]
+- id: lookup-weatherpruf-post-login
+  question: Where does weatherpruf decide where to send the user after login?
+  repos: [weatherpruf]
   expected_intent: lookup
-  expected_files: [haive-mind/src/haive/graph/timewindow.py]
-- id: lookup-haive-budget
-  question: Where is the per-question LLM call budget enforced?
-  repos: [haive-mind]
+  expected_files: [weatherpruf/frontend/src/lib/oauth.ts]
+- id: lookup-weatherpruf-rls
+  question: How does weatherpruf's database keep each user's rows private?
+  repos: [weatherpruf]
   expected_intent: lookup
-  expected_files: [haive-mind/src/haive/llm/budget.py]
+  expected_files: [weatherpruf/db/migrations/0003_rls.sql]
 - id: lookup-weatherpruf-signup-cap
   question: How does weatherpruf enforce the sign-up cap?
   repos: [weatherpruf]
@@ -59,12 +59,17 @@
   repos: [hnsw-engine]
   expected_intent: lookup
   expected_files: [hnsw-engine/include/hnsw/index.hpp]
+- id: lookup-hnsw-recall-test
+  question: How do hnsw-engine's tests check recall against exact search?
+  repos: [hnsw-engine]
+  expected_intent: lookup
+  expected_files: [hnsw-engine/tests/py/test_index.py, hnsw-engine/tests/cpp/test_index.cpp]
 
 # ---------------------------------------------------------------- recall
 - id: recall-vector-search
   question: How have I implemented vector search across my projects?
   expected_intent: recall
-  expected_files: [hnsw-engine/include/hnsw/index.hpp, haive-mind/src/haive/store/base.py]
+  expected_files: [hnsw-engine/include/hnsw/index.hpp]
 - id: recall-oauth
   question: How have I handled sign-in or OAuth before?
   expected_intent: recall
@@ -73,18 +78,12 @@
     - weatherpruf/backend/app/auth.py
     - technical-req-rag/src/Server/Controllers/UserController.cs
   notes: from a verified paid run (Cognito/OIDC, Supabase + MCP OAuth, App Service Easy Auth, Flask sessions)
-- id: recall-env-config
-  question: How have I loaded settings and secrets from environment variables in my projects?
+- id: recall-login-required
+  question: How have I protected routes so only logged-in users can reach them?
   expected_intent: recall
-  expected_files: [haive-mind/src/haive/config.py, weatherpruf/backend/app/config.py]
-  notes: CHECK weatherpruf path (from commit a90247e's file list)
+  expected_files: [CSE477-WebAppDev/homework/Homework-3/flask_app/routes.py, weatherpruf/backend/app/auth.py]
 
 # ---------------------------------------------------------------- history
-- id: history-commit-citations
-  question: When and why did haive start citing commits?
-  repos: [haive-mind]
-  expected_intent: history
-  notes: commit 65169b0 "Make commits citable; stop answer retries that aren't helping"
 - id: history-weatherpruf-landing
   question: Why was a public landing page added to weatherpruf?
   repos: [weatherpruf]
@@ -97,24 +96,23 @@
   notes: time-window path (no grader call); results depend on today's date
 
 # ---------------------------------------------------------------- compare
-- id: compare-retrieval
-  question: How do haive-mind and technical-req-rag differ in how they retrieve context?
-  repos: [haive-mind, technical-req-rag]
+- id: compare-signin
+  question: How do intrinsic-valuation and technical-req-rag differ in how users sign in?
+  repos: [intrinsic-valuation, technical-req-rag]
   expected_intent: compare
-  expected_files: [haive-mind/src/haive/graph/retrieve.py, technical-req-rag/docs/ARCHITECTURE.md]
-  notes: technical-req-rag has no retrieval code; RAG is in Azure AI Search (its ARCHITECTURE.md says so)
-- id: compare-vector-store
-  question: Compare how hnsw-engine and haive-mind store and search vectors
-  repos: [hnsw-engine, haive-mind]
+  expected_files: [intrinsic-valuation/frontend/lib/auth.ts, technical-req-rag/src/Server/Controllers/UserController.cs]
+- id: compare-api-auth
+  question: Compare how weatherpruf and technical-req-rag authenticate API requests
+  repos: [weatherpruf, technical-req-rag]
   expected_intent: compare
-  expected_files: [hnsw-engine/include/hnsw/index.hpp, haive-mind/src/haive/store/base.py]
+  expected_files: [weatherpruf/backend/app/auth.py, technical-req-rag/src/Server/Controllers/UserController.cs]
 
 # ---------------------------------------------------------------- architecture
-- id: architecture-haive
-  question: Break down the architecture of haive-mind
-  repos: [haive-mind]
+- id: architecture-trr
+  question: Break down the architecture of technical-req-rag
+  repos: [technical-req-rag]
   expected_intent: architecture
-  expected_files: [haive-mind/README.md, haive-mind/docs/ARCHITECTURE.md, haive-mind/src/haive/graph/build.py]
+  expected_files: [technical-req-rag/docs/ARCHITECTURE.md, technical-req-rag/README.md]
 - id: architecture-weatherpruf-deploy
   question: Break down how weatherpruf is deployed
   repos: [weatherpruf]

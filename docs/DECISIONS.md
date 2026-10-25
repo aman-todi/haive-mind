@@ -283,3 +283,12 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     i.e. the tail of a multi-line signature or an earlier block's `}`). Symbols are reduced to their
     bare name first (`parse_metric()`, `HnswIndex<T>::search`, "BruteForceIndex class"). A symbol
     that is neither near nor enclosing still fails, so invented names are still caught.
+
+50. **haive doesn't index its own source by default.** With haive-mind registered, answers cited its
+    eval suite (the expected files for the very question being asked) and its original spec as if it
+    described current behavior. Global `extra_ignore` patterns would also hide matching files in
+    every other repo. Most users clone haive-mind to run it, not to ask about it, so
+    `haive add --scan` skips any repo whose pyproject declares the `haive-mind` project (whatever its
+    folder is called), with a line saying so; adding it by path still works for people developing
+    haive. The author unregisters it (`haive remove haive-mind`), and the eval suite no longer has
+    questions about it.
