@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
-from haive.types import Chunk
+from haive.types import MODULE_SYMBOL, Chunk
 
 MAX_TOKENS = 1500
 CHARS_PER_TOKEN = 4
@@ -402,7 +402,7 @@ def chunk_code(repo: str, path: str, text: str, language: str) -> list[Chunk]:
     def flush() -> None:
         nonblank = [i for i in run if lines[i].strip()]
         if any(len(lines[i].strip()) > 3 for i in nonblank):
-            chunks.extend(_emit(repo, path, lines, language, nonblank[0], nonblank[-1], "<module>"))
+            chunks.extend(_emit(repo, path, lines, language, nonblank[0], nonblank[-1], MODULE_SYMBOL))
         run.clear()
 
     for i, done in enumerate(covered):

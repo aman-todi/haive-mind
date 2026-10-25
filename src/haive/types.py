@@ -13,6 +13,8 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MODULE_SYMBOL = "<module>"  # symbol of a chunk of top-level code (no enclosing definition)
+
 ChunkKind = Literal["code", "config", "doc", "commit"]
 Intent = Literal["lookup", "recall", "history", "debug", "compare", "architecture", "general"]
 INTENTS: tuple[str, ...] = ("lookup", "recall", "history", "debug", "compare", "architecture", "general")

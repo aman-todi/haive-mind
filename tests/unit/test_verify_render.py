@@ -178,6 +178,7 @@ def test_symbol_may_be_the_definition_enclosing_the_cited_lines(tmp_path):
     assert not errs(3, 3, "Meter") and not errs(3, 3, "Meter.__init__")  # enclosing class / method
     assert not errs(13, 15, "`verify()`")
     assert "neither in the cited lines nor a definition around them" in errs(13, 15, "check_everything")[0]
+    assert not errs(13, 15, "<module>")  # the chunker's label for top-level code
     assert symbol_name("HnswIndex<T>::search") == "search"
     assert symbol_name("BruteForceIndex class") == "BruteForceIndex"
 

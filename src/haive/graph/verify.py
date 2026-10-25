@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from haive.tools.files import FileAccessError, file_lines
-from haive.types import Answer, Claim, CommitRef, Evidence, RepoRef, WebRef, WebResult
+from haive.types import MODULE_SYMBOL, Answer, Claim, CommitRef, Evidence, RepoRef, WebRef, WebResult
 
 SYMBOL_SLACK = 3
 DOC_REACH = 40  # lines a doc comment may run past the cited range before the definition it documents
@@ -116,7 +116,7 @@ def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, 
     errs = []
     if ref.start_line < 1 or ref.end_line < ref.start_line or ref.end_line > len(lines):
         errs.append(f"{loc}: line range invalid (file has {len(lines)} lines)")
-    elif ref.symbol:
+    elif ref.symbol and ref.symbol != MODULE_SYMBOL:  # <module>: top-level code, no definition to find
         lo = max(0, ref.start_line - 1 - SYMBOL_SLACK)
         hi = min(len(lines), ref.end_line + SYMBOL_SLACK)
         name = symbol_name(ref.symbol)
