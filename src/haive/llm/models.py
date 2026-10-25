@@ -62,6 +62,8 @@ def get_model(model_id: str, cfg: Config, rate_limiter: InMemoryRateLimiter | No
             "HTTP-Referer": "https://github.com/aman-todi/haive-mind",
             "X-Title": "haive-mind",
         }
+        if m.routing and not is_free(model_id):  # a free model has one provider: nothing to route
+            kwargs["extra_body"] = {"provider": m.routing}
     return init_chat_model(model_id, **kwargs)
 
 

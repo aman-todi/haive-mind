@@ -6,7 +6,7 @@ import difflib
 import os
 import tomllib
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 import tomli_w
 from pydantic import BaseModel, Field
@@ -81,6 +81,13 @@ class ModelsConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
     provider: str = "openai"  # langchain model_provider; any OpenAI-compatible endpoint works
     api_key_env: str = "OPENROUTER_API_KEY"
+    # OpenRouter provider routing for paid models (the request's `provider` object). A paid model is
+    # served by many providers; OpenRouter's default favors the cheapest, which is sometimes one that
+    # stalls for minutes. Sorting by throughput, and preferring providers that start answering within
+    # 10 s, cost a little more per call. {} restores OpenRouter's default.
+    routing: dict[str, Any] = Field(
+        default_factory=lambda: {"sort": "throughput", "preferred_max_latency": {"p90": 10}}
+    )
     requests_per_minute: int = 20  # client-side throttle for free models (OpenRouter allows ~20/min)
     max_retries: int = 1  # per model, by the OpenAI client (honors Retry-After), before falling back
     # Per request. Generous so a slow answer isn't cut off just before it finishes; a hung request is
@@ -102,6 +109,9 @@ class LimitsConfig(BaseModel):
     max_grade_loops: int = 2
     max_answer_retries: int = 2
     daily_call_budget: int = 1000
+    # Claims per answer: the model is asked for at most this many (related points merged), and the
+    # terminal shows at most this many (--all shows every claim; --json always has them all).
+    max_claims: int = 12
     expand_with_tools: bool = True  # let the model pick expand tools (else deterministic heuristics)
 
 

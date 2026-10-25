@@ -111,9 +111,11 @@ def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, 
     if ref.repo not in lines_.roots:
         return [f"{loc}: unknown repo '{ref.repo}'"]
     lines = lines_.get(ref.repo, ref.path)
-    if lines is None:
-        return [f"{loc}: file does not exist in the working tree"]
     errs = []
+    if (ref.repo, ref.path) not in evidence_paths:
+        errs.append(f"{loc}: path was not among the retrieved evidence")
+    if lines is None:
+        return [f"{loc}: file does not exist in the working tree", *errs]
     if ref.start_line < 1 or ref.end_line < ref.start_line or ref.end_line > len(lines):
         errs.append(f"{loc}: line range invalid (file has {len(lines)} lines)")
     elif ref.symbol and ref.symbol != MODULE_SYMBOL:  # <module>: top-level code, no definition to find
@@ -131,8 +133,6 @@ def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, 
             errs.append(
                 f"{loc}: symbol '{ref.symbol}' is neither in the cited lines nor a definition around them"
             )
-    if (ref.repo, ref.path) not in evidence_paths:
-        errs.append(f"{loc}: path was not among the retrieved evidence")
     return errs
 
 

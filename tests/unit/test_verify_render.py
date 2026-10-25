@@ -50,6 +50,10 @@ def test_invalid_claims(sample_repo):
     assert set(r.bad_claims) == {f"s0.c{i}" for i in (1, 2, 3, 4, 5, 7)}
     assert any("not among the retrieved evidence" in e for e in r.errors)
     assert any("symbol 'other_fn'" in e for e in r.errors)
+    assert r.bad_claims["s0.c1"] == [  # an invented path: both facts, so it reads as made up
+        "v/nope.py:1-7: file does not exist in the working tree",
+        "v/nope.py:1-7: path was not among the retrieved evidence",
+    ]
     # the uncited repo claim and the cited model claim were relabeled instead of sent back
     assert r.relabeled == 2 and a.sections[0].claims[0].source == "model"
     assert a.sections[0].claims[6].source == "repo"
@@ -227,3 +231,20 @@ def test_symbol_after_allman_braces_and_on_documented_definitions(tmp_path):
     assert not errs("C.cs", 10, 12, "UserController")
     assert not errs("oauth.ts", 2, 3, "postLoginRedirect")  # its doc comment
     assert errs("oauth.ts", 2, 3, "completeSignIn")
+
+
+def test_claims_shown_are_capped_across_sections():
+    from haive.render import shown_claims
+
+    def sec(name, n):
+        return Section(heading=name, claims=[Claim(text=f"{name}{i}", source="model") for i in range(n)])
+
+    a = Answer(summary="s", sections=[sec("a", 5), sec("b", 1), sec("c", 4)])
+    shown = shown_claims(a, 6)
+    assert [[c.text for c in s] for s in shown] == [["a0", "a1", "a2"], ["b0"], ["c0", "c1"]]
+    assert sum(map(len, shown_claims(a, None))) == 10
+    con = Console(record=True, width=100)
+    render_answer(con, a, {}, max_claims=6)
+    out = con.export_text()
+    assert "a2" in out and "a3" not in out and "… 2 more" in out
+    assert "4 more claim(s) not shown; --all shows every claim." in out

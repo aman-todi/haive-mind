@@ -325,3 +325,22 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     but the author, so a removed setting or renamed column is deleted outright: no migrations, aliases,
     or tolerance shims for earlier configs or databases. The usage-column rename migration is folded
     into the base schema; an older local `haive.db` or `config.toml` is fixed by hand or rebuilt.
+
+55. **Paid models are routed to fast providers; answers are capped at 12 claims.** In the eval after
+    #53, two questions took 486 s and 189 s with 3-4 calls each; rerun, the same questions with
+    answers of the same length took 37 s and 14 s. The calls had stalled on a provider:
+    `deepseek-v4.1-flash` has about 30 providers on OpenRouter, and its default routing favors price.
+    Paid requests now carry `provider: {sort: throughput, preferred_max_latency: {p90: 10}}`
+    (`models.routing`; `{}` restores the default). Thresholds are preferences, so a request still
+    runs when no provider meets them. Free models have one provider each and get no routing. Separately, long
+    answers (32 claims for a 3-month history, 18 for an architecture) are hard to read and slow to
+    generate: the answer prompt asks for at most `limits.max_claims` (12) claims, merging related
+    points (history groups related commits), and the terminal shows at most that many, round-robin
+    across sections so none is dropped whole, with `--all` to show the rest. `--json` is unchanged.
+
+56. **A `<module>` symbol is not checked, and invented paths say so.** The chunker labels top-level
+    code `<module>` and evidence headers show it, so models cite it; the symbol check then looked for
+    a definition named "module". It is now skipped. A citation of a missing file also reports
+    whether the path was in the evidence: the eval's `backend/README.md` (weatherpruf has only a root
+    README, the only one architecture questions read) was invented by the model, which the old
+    early return hid.

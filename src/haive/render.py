@@ -47,7 +47,26 @@ def fmt_duration(seconds: float) -> str:
     return f"{m}m {s:02d}s"
 
 
-def render_answer(console: Console, answer: Answer, meta: dict[str, Any] | None = None) -> None:
+def shown_claims(answer: Answer, limit: int | None) -> list[list[Any]]:
+    """Claims to print per section: round-robin across sections up to ``limit``, so every section
+    keeps its first claims rather than the last sections being cut off."""
+    if limit is None:
+        return [list(s.claims) for s in answer.sections]
+    shown: list[list[Any]] = [[] for _ in answer.sections]
+    left, depth = limit, 0
+    while left > 0 and any(depth < len(s.claims) for s in answer.sections):
+        for i, s in enumerate(answer.sections):
+            if left > 0 and depth < len(s.claims):
+                shown[i].append(s.claims[depth])
+                left -= 1
+        depth += 1
+    return shown
+
+
+def render_answer(
+    console: Console, answer: Answer, meta: dict[str, Any] | None = None, max_claims: int | None = None
+) -> None:
+    """``max_claims`` limits the section claims printed (None: all); hypotheses are always shown."""
     meta = meta or {}
     console.print()
     if "latency_s" in meta:
@@ -62,11 +81,16 @@ def render_answer(console: Console, answer: Answer, meta: dict[str, Any] | None 
         )
         for c in h.claims:
             console.print("  • " + claim_markup(c))
-    for s in answer.sections:
+    shown = shown_claims(answer, max_claims)
+    for s, claims in zip(answer.sections, shown, strict=True):
+        if not claims:
+            continue
         if s.heading:
             console.print(f"\n[bold underline]{escape(s.heading)}[/]")
-        for c in s.claims:
+        for c in claims:
             console.print("  • " + claim_markup(c))
+        if len(claims) < len(s.claims):
+            console.print(f"  [dim]… {len(s.claims) - len(claims)} more[/]")
     if answer.suggested_fix and answer.suggested_fix.diff.strip():
         label = (
             "Suggested fix (approximate: context lines did not match the file)"
@@ -81,6 +105,9 @@ def render_answer(console: Console, answer: Answer, meta: dict[str, Any] | None 
             console.print(f"  ? {escape(f)}")
     notices = meta.get("notices") or []
     footer = []
+    hidden = sum(len(s.claims) for s in answer.sections) - sum(map(len, shown))
+    if hidden:
+        notices = [*notices, f"{hidden} more claim(s) not shown; --all shows every claim."]
     if meta.get("scope"):
         footer.append(f"scope: {', '.join(meta['scope'])}")
     if "llm_calls" in meta:

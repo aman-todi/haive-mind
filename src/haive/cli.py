@@ -58,6 +58,7 @@ TierOpt = Annotated[
         "--ultra/--strong", help="Use the ultra or strong model list for this command (default: models.tier)."
     ),
 ]
+AllOpt = Annotated[bool, typer.Option("--all", help="Show every claim (default: at most limits.max_claims).")]
 WebOpt = Annotated[
     str | None, typer.Option("--web", help="Web search: off | ask | auto (default from config).")
 ]
@@ -672,7 +673,7 @@ def _web_mode(web: str | None) -> str | None:
     return web
 
 
-def _show(result: Any, as_json: bool, trace: bool) -> None:
+def _show(result: Any, as_json: bool, trace: bool, max_claims: int | None = None) -> None:
     from haive.render import render_answer, render_trace, to_json
 
     if as_json:
@@ -682,7 +683,7 @@ def _show(result: Any, as_json: bool, trace: bool) -> None:
         print(to_json(result.answer, meta))
         return
     if result.answer:
-        render_answer(console, result.answer, result.meta())
+        render_answer(console, result.answer, result.meta(), max_claims)
     if trace:
         render_trace(console, result.state.get("node_log") or [])
 
@@ -706,6 +707,7 @@ def _one_shot(
     interactive: bool,
     paid: bool | None = None,
     ultra: bool | None = None,
+    show_all: bool = False,
 ) -> None:
     rt = runtime()
     _budget_gate(rt, force)
@@ -727,7 +729,7 @@ def _one_shot(
             rt.checkpointer.delete_thread(tid)
         except Exception:
             pass
-    _show(result, as_json, trace)
+    _show(result, as_json, trace, None if show_all else rt.cfg.limits.max_claims)
 
 
 @app.command()
@@ -741,10 +743,13 @@ def ask(
     force: Annotated[bool, typer.Option("--force", help="Ignore the daily call budget.")] = False,
     paid: PaidOpt = None,
     ultra: TierOpt = None,
+    show_all: AllOpt = False,
 ) -> None:
     """Ask a question about your repos."""
     interactive = sys.stdin.isatty() and sys.stderr.isatty() and not as_json
-    _one_shot(question, None, _scope(repo, group), web, as_json, trace, force, interactive, paid, ultra)
+    _one_shot(
+        question, None, _scope(repo, group), web, as_json, trace, force, interactive, paid, ultra, show_all
+    )
 
 
 @app.command()
@@ -761,6 +766,7 @@ def debug(
     force: Annotated[bool, typer.Option("--force")] = False,
     paid: PaidOpt = None,
     ultra: TierOpt = None,
+    show_all: AllOpt = False,
 ) -> None:
     """Diagnose an error trace and recommend a fix (never applied)."""
     from_stdin = file in (None, "-")
@@ -776,7 +782,9 @@ def debug(
     if not text.strip():
         fail("no trace text given")
     interactive = not from_stdin and sys.stdin.isatty() and sys.stderr.isatty() and not as_json
-    _one_shot(question, text, _scope(repo, group), web, as_json, trace, force, interactive, paid, ultra)
+    _one_shot(
+        question, text, _scope(repo, group), web, as_json, trace, force, interactive, paid, ultra, show_all
+    )
 
 
 # ================================================================== chat
@@ -849,6 +857,7 @@ def chat(
     force: Annotated[bool, typer.Option("--force")] = False,
     paid: PaidOpt = None,
     ultra: TierOpt = None,
+    show_all: AllOpt = False,
 ) -> None:
     """Interactive chat with saved, titled, resumable threads."""
     from haive.render import render_answer
@@ -927,7 +936,9 @@ def chat(
             console.print("[dim]cancelled[/]")
             continue
         if result.answer:
-            render_answer(console, result.answer, result.meta())
+            render_answer(
+                console, result.answer, result.meta(), None if show_all else rt.cfg.limits.max_claims
+            )
         if result.state.get("title"):
             console.print(f"[dim]thread: {escape(result.state['title'])}[/]")
 

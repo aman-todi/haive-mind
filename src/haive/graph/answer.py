@@ -90,6 +90,7 @@ def make_answer(deps: Deps):
             question=state["question"],
             history=history_messages(state),
             errors=errors,
+            max_claims=deps.cfg.limits.max_claims,
             evidence=render_evidence(state.get("evidence") or []),
             web=render_web(state.get("web_results") or []),
         )
