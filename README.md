@@ -290,7 +290,11 @@ registered repos). Results land in `eval/results/<timestamp>/`, and the table be
 the latest run, so it only ever shows measured numbers.
 
 <!-- eval-results:start -->
-_No eval has been run with real models yet. This table is filled in by `haive eval`._
+Measured 2026-10-25 on `questions.yaml` (19 questions; model=deepseek/deepseek-v4.1-flash-1017; store=pinecone; embeddings=jinaai/jina-embeddings-v2-base-code).
+
+| ablation | intent_accuracy | file_hit_rate | recall@10 | citation_validity | debug_top1 | debug_any | llm_calls_mean | latency_p50_s | latency_p95_s | questions | errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| hybrid+loop | 100% | 100% | 100% | 99% | – | – | 3.58 | 13.47 | 28.76 | 19 | 0 |
 <!-- eval-results:end -->
 
 ## Development
