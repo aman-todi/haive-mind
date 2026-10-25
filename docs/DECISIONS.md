@@ -202,7 +202,7 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     `git.rev_list`, the `ChatModel` protocol, the `turn` and `summaries` state fields, and unused
     parameters (`_commits(rebuild=)`, `is_external(function=)`, `_newest(deps)`). One duration
     formatter instead of two. "Role" is now "step" everywhere it labels an LLM call, including the
-    usage table (`haive.db` migration v2 renames the column in place, so no re-index). Docs and
+    usage table (the column is `step` in the schema; the one-off rename migration was later dropped, #54). Docs and
     comments no longer describe fast/strong roles, Linux-only paths, or freshness running first;
     PROGRESS.md is a short current status. Cross-references for earlier entries: #27 revises #9 (commit
     chunks are now citable via `CommitRef`), and #37's "rest of the question" became "rest of the
@@ -320,3 +320,8 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     OpenRouter in late October) is replaced by its successor Nemotron 3.5 Super VL, and MiniMax M3.1
     Flash (its free variant was delisted) by Gemma 4 26B A4B, a faster MoE than the dense 31B with
     similar scores. The ultra and paid lists showed ~100% provider uptime and are unchanged.
+
+54. **No support code for removed features or old formats before distribution.** Nobody runs haive
+    but the author, so a removed setting or renamed column is deleted outright: no migrations, aliases,
+    or tolerance shims for earlier configs or databases. The usage-column rename migration is folded
+    into the base schema; an older local `haive.db` or `config.toml` is fixed by hand or rebuilt.

@@ -36,11 +36,9 @@ MIGRATIONS: list[str] = [
         id TEXT PRIMARY KEY, title TEXT, scope_json TEXT, turns INTEGER DEFAULT 0,
         created_at REAL, updated_at REAL);
     CREATE TABLE usage(
-        date TEXT, role TEXT, model TEXT, calls INTEGER DEFAULT 0, prompt_tokens INTEGER DEFAULT 0,
-        completion_tokens INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, PRIMARY KEY(date, role, model));
+        date TEXT, step TEXT, model TEXT, calls INTEGER DEFAULT 0, prompt_tokens INTEGER DEFAULT 0,
+        completion_tokens INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, PRIMARY KEY(date, step, model));
     """,
-    # v2: usage is counted per step (router, grade, answer, ...) since one model list serves a question
-    "ALTER TABLE usage RENAME COLUMN role TO step;",
 ]
 
 
