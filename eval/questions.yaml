@@ -49,7 +49,6 @@
   repos: [weatherpruf]
   expected_intent: lookup
   expected_files: [weatherpruf/backend/app/mcp_server/auth.py]
-  notes: CHECK path (from commit 8576406's file list)
 - id: lookup-hnsw-metrics
   question: Which distance metrics does hnsw-engine support, and where are their names parsed?
   repos: [hnsw-engine]
@@ -69,8 +68,11 @@
 - id: recall-oauth
   question: How have I handled sign-in or OAuth before?
   expected_intent: recall
-  expected_files: [weatherpruf/backend/app/mcp_server/auth.py]
-  notes: CHECK; add other repos' auth files if they have any
+  expected_files:
+    - intrinsic-valuation/frontend/lib/auth.ts
+    - weatherpruf/backend/app/auth.py
+    - technical-req-rag/src/Server/Controllers/UserController.cs
+  notes: from a verified paid run (Cognito/OIDC, Supabase + MCP OAuth, App Service Easy Auth, Flask sessions)
 - id: recall-env-config
   question: How have I loaded settings and secrets from environment variables in my projects?
   expected_intent: recall
@@ -97,11 +99,13 @@
 # ---------------------------------------------------------------- compare
 - id: compare-retrieval
   question: How do haive-mind and technical-req-rag differ in how they retrieve context?
+  repos: [haive-mind, technical-req-rag]
   expected_intent: compare
-  expected_files: [haive-mind/src/haive/graph/retrieve.py]
-  notes: add technical-req-rag's retrieval file
+  expected_files: [haive-mind/src/haive/graph/retrieve.py, technical-req-rag/docs/ARCHITECTURE.md]
+  notes: technical-req-rag has no retrieval code; RAG is in Azure AI Search (its ARCHITECTURE.md says so)
 - id: compare-vector-store
   question: Compare how hnsw-engine and haive-mind store and search vectors
+  repos: [hnsw-engine, haive-mind]
   expected_intent: compare
   expected_files: [hnsw-engine/include/hnsw/index.hpp, haive-mind/src/haive/store/base.py]
 
