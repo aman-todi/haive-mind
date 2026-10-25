@@ -82,11 +82,16 @@ class ModelsConfig(BaseModel):
     provider: str = "openai"  # langchain model_provider; any OpenAI-compatible endpoint works
     api_key_env: str = "OPENROUTER_API_KEY"
     # OpenRouter provider routing for paid models (the request's `provider` object). A paid model is
-    # served by many providers; OpenRouter's default favors the cheapest, which is sometimes one that
-    # stalls for minutes. Sorting by throughput, and preferring providers that start answering within
-    # 10 s, cost a little more per call. {} restores OpenRouter's default.
+    # served by many providers, some of which stall for minutes. Providers that start answering within
+    # 10 s (p90) and stream at least 30 tokens/s (median) over the last 5 minutes are preferred,
+    # cheapest first; the rest are tried after them, so a request still runs. {} restores OpenRouter's
+    # default (price-weighted load balancing).
     routing: dict[str, Any] = Field(
-        default_factory=lambda: {"sort": "throughput", "preferred_max_latency": {"p90": 10}}
+        default_factory=lambda: {
+            "sort": "price",
+            "preferred_max_latency": {"p90": 10},
+            "preferred_min_throughput": {"p50": 30},
+        }
     )
     requests_per_minute: int = 20  # client-side throttle for free models (OpenRouter allows ~20/min)
     max_retries: int = 1  # per model, by the OpenAI client (honors Retry-After), before falling back
@@ -111,7 +116,7 @@ class LimitsConfig(BaseModel):
     daily_call_budget: int = 1000
     # Claims per answer: the model is asked for at most this many (related points merged), and the
     # terminal shows at most this many (--all shows every claim; --json always has them all).
-    max_claims: int = 12
+    max_claims: int = 10
     expand_with_tools: bool = True  # let the model pick expand tools (else deterministic heuristics)
 
 

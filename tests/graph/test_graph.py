@@ -444,6 +444,8 @@ def test_recent_changes_cite_commits(cfg, db, store):
     res = r.run("what changed recently?", thread_id="t")
     whys = [e["why"] for e in res.state["evidence"]]
     assert whys[0] == "history window" and not any("git log -S" in w for w in whys)
+    window = res.state["evidence"][0]
+    assert window["id"] == "history-window" and "every commit in the window" in window["text"]
     assert "GradeOutput" not in fake.calls  # the window is the answer's evidence: no grading call
     assert any(n.startswith("History window: the newest") for n in res.state["notices"])
     assert f"sha={head[:12]}" in str(fake.seen[-1])  # commit shas are in the evidence headers

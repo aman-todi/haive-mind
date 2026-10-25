@@ -326,7 +326,7 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     or tolerance shims for earlier configs or databases. The usage-column rename migration is folded
     into the base schema; an older local `haive.db` or `config.toml` is fixed by hand or rebuilt.
 
-55. **Paid models are routed to fast providers; answers are capped at 12 claims.** In the eval after
+55. **Paid models are routed to fast providers; answers are capped at 12 claims (10 since #57).** In the eval after
     #53, two questions took 486 s and 189 s with 3-4 calls each; rerun, the same questions with
     answers of the same length took 37 s and 14 s. The calls had stalled on a provider:
     `deepseek-v4.1-flash` has about 30 providers on OpenRouter, and its default routing favors price.
@@ -344,3 +344,15 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     whether the path was in the evidence: the eval's `backend/README.md` (weatherpruf has only a root
     README, the only one architecture questions read) was invented by the model, which the old
     early return hid.
+
+57. **Cheapest responsive provider; 10 claims; history windows say whether they are complete.**
+    Routing now sorts paid providers by price but prefers those within p90 latency 10 s and median
+    throughput 30 tokens/s (OpenRouter moves the rest to the end of the list), so the cheapest
+    provider that isn't stalling serves the call, instead of the fastest one at any price.
+    `max_claims` drops to 10, and history answers always group related commits (the same feature,
+    fix, or doc update) into one claim. A window now lists up to 50 commits (was 30) and is
+    fetched one past the cap to tell a complete list from a truncated one. A history-window
+    evidence item states the window, the date span of its commits, and whether the list is
+    complete, so a repo worked on for one week of a 3-month window reads as "all the work fell in
+    that week", not "the evidence only covers a week". The notice says when older commits were
+    cut, and suggests a shorter window.

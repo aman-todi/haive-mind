@@ -207,7 +207,7 @@ def recall(
 
 RECENT_COMMITS = 12
 HISTORY_WINDOW = "history window"  # evidence label for the commits of a requested time window
-MAX_WINDOW_COMMITS = 30  # cap on commits listed for one window (and history evidence overall)
+MAX_WINDOW_COMMITS = 50  # cap on commits listed for one window (and history evidence overall)
 
 
 def _commit_ev(repo: str, c: dict[str, Any], why: str) -> dict[str, Any]:
@@ -247,21 +247,55 @@ def history(deps: Deps, state: GraphState, ctx: NodeCtx, scope: list[str]) -> li
     if deps.use_ripgrep and (window or not idents):
         # "what changed (recently | in the last 2 weeks | in the last 20 commits)?": list the window itself
         counted = True  # whether the label already says how many commits
+        truncated = False  # the window holds more commits than are listed
         if window and window.commits:
             newest = _newest(ctx, roots, min(window.commits, MAX_WINDOW_COMMITS), None)
         else:
             counted = False
             w = window or default_window()
-            newest = _newest(ctx, roots, MAX_WINDOW_COMMITS, w.git_since)
+            newest = _newest(ctx, roots, MAX_WINDOW_COMMITS + 1, w.git_since)
+            truncated, newest = len(newest) > MAX_WINDOW_COMMITS, newest[:MAX_WINDOW_COMMITS]
             if not window and len(newest) < DEFAULT_MIN_COMMITS:
                 newest = _newest(ctx, roots, RECENT_COMMITS, None)
                 w.label = f"the newest {len(newest)} commits, since fewer than {DEFAULT_MIN_COMMITS} landed in {w.label}"
                 counted = True
             window = w
+        count = (
+            f"the newest {len(newest)} of its commits (older ones are not listed)"
+            if truncated
+            else f"all {len(newest)} commits"
+        )
+        span = (
+            f", dated {utc_iso(newest[-1][1]['date'])[:10]} to {utc_iso(newest[0][1]['date'])[:10]}"
+            if newest
+            else ""
+        )
+        # tells the answer whether quiet stretches mean no activity or an incomplete list
+        evs.append(
+            Evidence(
+                id="history-window",
+                source="tool",
+                text=f"History window: {window.label}"
+                + ("" if counted else f"; listed: {count}{span}")
+                + ". "
+                + (
+                    ""
+                    if truncated
+                    else "This is every commit in the window, so dates without commits had no activity."
+                ),
+                why=HISTORY_WINDOW,
+            ).model_dump()
+        )
         evs += [_commit_ev(repo, c, HISTORY_WINDOW) for repo, c in newest]
         ctx.notices.append(
             f"History window: {window.label}"
-            + ("." if counted else f" ({len(newest)} commits).")
+            + (
+                "."
+                if counted
+                else f" (newest {len(newest)} commits; ask for a shorter window to see the rest)."
+                if truncated
+                else f" ({len(newest)} commits)."
+            )
             + (
                 " Ask e.g. 'in the last 2 months' or 'last 20 commits' to change it."
                 if not parse_window(q)

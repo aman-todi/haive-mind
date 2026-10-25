@@ -140,7 +140,8 @@ def test_get_model_wiring(monkeypatch):
     assert make_rate_limiter(0) is None
     assert "provider" not in (model.extra_body or {})  # a free model has a single provider
     paid = get_model("deepseek/deepseek-v4.1-flash-1017", cfg, limiter)
-    assert paid.extra_body == {"provider": {"sort": "throughput", "preferred_max_latency": {"p90": 10}}}
+    assert paid.extra_body["provider"]["sort"] == "price"  # cheapest among the responsive providers
+    assert paid.extra_body["provider"]["preferred_max_latency"] == {"p90": 10}
     assert paid.rate_limiter is None
     cfg.models.routing = {}
     assert not get_model("deepseek/deepseek-v4.1-flash-1017", cfg).extra_body  # OpenRouter's default

@@ -174,7 +174,7 @@ ultra = ["nvidia/nemotron-3-ultra-550b-a55b:free", "thinkingmachines/inkling:fre
          "poolside/laguna-s-2.1:free", "openrouter/free"]
 strong_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
 ultra_paid = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
-routing = { sort = "throughput", preferred_max_latency = { p90 = 10 } }  # paid: fastest providers
+routing = { sort = "price", preferred_max_latency = { p90 = 10 }, preferred_min_throughput = { p50 = 30 } }
 requests_per_minute = 20      # client-side throttle
 max_retries = 1               # per model (honors Retry-After) before falling back
 timeout_seconds = 125         # per request; slow answers aren't cut off
@@ -184,7 +184,7 @@ base_url = "https://openrouter.ai/api/v1"
 max_llm_calls_per_question = 25
 max_grade_loops = 2
 max_answer_retries = 2
-max_claims = 12               # per answer: asked of the model and shown (--all shows the rest)
+max_claims = 10               # per answer: asked of the model and shown (--all shows the rest)
 daily_call_budget = 1000
 expand_with_tools = true      # the model picks expand tools; false = deterministic heuristics
 
@@ -221,12 +221,13 @@ costs nothing, but expect a minute a question, OpenRouter's free rate limits, an
 train on prompts.
 
 Each paid model is served by many providers on OpenRouter, and its default routing favors the cheapest,
-which is occasionally one that stalls for minutes. haive asks OpenRouter (`models.routing`) to rank
-providers by throughput and to prefer ones that start answering within 10 s at p90; that costs a little
-more per call. Set `routing = {}` for OpenRouter's default.
+which is occasionally one that stalls for minutes. haive asks OpenRouter (`models.routing`) to prefer
+providers that start answering within 10 s and stream at least 30 tokens/s (p90 latency, median throughput, over the last 5
+minutes), and to pick the cheapest of those; slower providers are tried only after them. Set
+`routing = {}` for OpenRouter's default.
 
-Answers are capped at `limits.max_claims` (12) claims: the model merges related points, and a history
-answer groups related commits. The terminal shows at most that many (spread across sections); `--all`
+Answers are capped at `limits.max_claims` (10) claims: the model merges related points, and a history
+answer groups related commits into one claim per piece of work. The terminal shows at most that many (spread across sections); `--all`
 shows any extra, and `--json` always includes every claim.
 
 Fallbacks are mostly served by other providers than the model before them, so one provider's outage
