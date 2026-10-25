@@ -222,8 +222,8 @@ train on prompts.
 
 Each paid model is served by many providers on OpenRouter, and its default routing favors the cheapest,
 which is occasionally one that stalls for minutes. haive asks OpenRouter (`models.routing`) to prefer
-providers that start answering within 10 s and stream at least 30 tokens/s (p90 latency, median throughput, over the last 5
-minutes), and to pick the cheapest of those; slower providers are tried only after them. Set
+providers that start answering within 10 s (p90) and stream at least 30 tokens/s (median) over the
+last 5 minutes, and to pick the cheapest of those; slower providers are tried only after them. Set
 `routing = {}` for OpenRouter's default.
 
 Answers are capped at `limits.max_claims` (10) claims: the model merges related points, and a history
