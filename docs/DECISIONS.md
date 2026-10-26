@@ -361,8 +361,9 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     `save_config` wrote every setting, so `haive init` or `haive add` froze that day's defaults into
     `config.toml` (a later default, like `max_claims` 10, never reached it). It now writes only
     values that differ from the defaults, plus the embedding model and vector store, which the index
-    was built with. Grouped history claims cite many commits, and the eval's first-try failures were
-    shas copied wrong (`b3086e546c4` for `b1d3086e546c`, `d4b...`). Verification now repairs a sha
-    that shares 7 consecutive hex characters with exactly one of the run's commits in that repo;
-    elided or ambiguous ones still fail, and the prompt asks for shas copied whole. Eval traces
-    also keep each question's final answer.
+    was built with. Values frozen in before this change stay until edited by hand. Grouped history
+    claims cite many commits, and the eval's first-try failures included shas copied wrong
+    (`b3086e546c4` for `b1d3086e546c`, `d4b...`). Verification now repairs a sha that shares 7
+    consecutive hex characters with exactly one of the run's commits in that repo; elided or
+    ambiguous ones still fail, and the prompt asks for shas copied whole. Eval traces also keep each
+    question's final answer, so a missed expected file can be checked without a rerun.
