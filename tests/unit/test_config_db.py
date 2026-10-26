@@ -19,8 +19,10 @@ def test_config_roundtrip(tmp_path):
     assert loaded.limits.max_llm_calls_per_question == 25
     assert "api_key =" not in p.read_text()  # secrets never land in config.toml
     text = p.read_text()
-    assert "[models]" not in text and "max_claims" not in text  # defaults aren't frozen into the file
-    assert "[embeddings]" in text and "jina-embeddings" in text  # but the index's embedding model is
+    # defaults are listed commented out: visible, but not frozen into the file
+    assert "\n# max_claims = 10\n" in text and "\n# use_paid = true\n" in text
+    assert '\nmodel = "jinaai/jina-embeddings-v2-base-code"\n' in text  # the index's model is pinned
+    assert "\n[groups]\ng = [" in text  # groups the user defined are kept
     c.limits.max_claims = 6
     c.models.strong = ["m"]
     loaded = load_config(save_config(c, p))

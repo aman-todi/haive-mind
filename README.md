@@ -143,8 +143,9 @@ questions at 100% unless `--force`.
 
 `config.toml` (with `.env` beside it) lives in `~/.config/haive/` on Linux and
 `~/Library/Application Support/haive/` on macOS, or in `$HAIVE_HOME/config/` if set. haive writes
-only the settings that differ from the defaults (plus the embedding model and vector store, which the
-index depends on), so new defaults reach you on upgrade. Every setting, with its default:
+every setting, but those left at their defaults are commented out (`# max_claims = 10`): uncomment a
+line to change it. Commented defaults update with haive; the embedding model and vector store are
+always written out, since the index was built with them. Every setting, with its default:
 
 ```toml
 [repos.valuation-backend]

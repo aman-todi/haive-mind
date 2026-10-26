@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 import os
 import tomllib
 from pathlib import Path
@@ -24,34 +25,43 @@ class RepoConfig(BaseModel):
 
 
 class IndexConfig(BaseModel):
-    max_commits: int = (
-        300  # commit chunks hold messages and file lists only; git log -S/-L cover code changes
+    max_commits: int = Field(
+        300, description="newest commits indexed per repo (messages and file lists; git covers the rest)"
     )
     max_file_kb: int = 512
-    extra_ignore: list[str] = Field(default_factory=lambda: ["*.ipynb"])
+    extra_ignore: list[str] = Field(
+        default_factory=lambda: ["*.ipynb"], description="glob patterns never indexed, on top of .gitignore"
+    )
 
 
 class VectorStoreConfig(BaseModel):
-    backend: Literal["pinecone", "chroma", "memory"] = "pinecone"  # memory: tests only
+    backend: Literal["pinecone", "chroma", "memory"] = Field(
+        "pinecone", description="pinecone | chroma (local); changing it needs a full re-index"
+    )
     pinecone_index: str = "haive"
     pinecone_cloud: str = "aws"
     pinecone_region: str = "us-east-1"
 
 
 class EmbeddingsConfig(BaseModel):
-    model: str = "jinaai/jina-embeddings-v2-base-code"
+    model: str = Field("jinaai/jina-embeddings-v2-base-code", description="changing it needs a full re-index")
     dim: int = 768
-    batch_size: int = 8  # lower it if indexing runs out of memory
+    batch_size: int = Field(8, description="lower it if indexing runs out of memory")
 
 
 class ModelsConfig(BaseModel):
     """One model answers every step of a question (router, grader, expand, answer, ...). Each tier is
     an ordered list: the first model that works is used, the rest are fallbacks."""
 
-    tier: Literal["strong", "ultra"] = "strong"  # default; --strong / --ultra override per command
-    # default; --paid / --free override per command. Paid answers in ~14 s for well under a cent a
-    # question; free is ~4.5x slower (p50 ~60 s) at about the same accuracy (README, Models).
-    use_paid: bool = True
+    tier: Literal["strong", "ultra"] = Field(
+        "strong", description="strong | ultra (bigger, slower models); per command: --strong / --ultra"
+    )
+    # Paid answers in ~14 s for well under a cent a question; free is ~4.5x slower (p50 ~60 s) at
+    # about the same accuracy (README, Models).
+    use_paid: bool = Field(
+        True,
+        description="paid models (~14 s, under a cent a question) or free (~60 s); per command: --paid / --free",
+    )
     strong: list[str] = Field(
         default_factory=lambda: [
             "nvidia/nemotron-3.5-super-vl:free",
@@ -111,19 +121,27 @@ class ModelsConfig(BaseModel):
 
 
 class LimitsConfig(BaseModel):
-    max_llm_calls_per_question: int = 25
+    max_llm_calls_per_question: int = Field(25, description="hard cap per question")
     max_grade_loops: int = 2
     max_answer_retries: int = 2
-    daily_call_budget: int = 1000
-    # Claims per answer: the model is asked for at most this many (related points merged), and the
-    # terminal shows at most this many (--all shows every claim; --json always has them all).
-    max_claims: int = 10
-    expand_with_tools: bool = True  # let the model pick expand tools (else deterministic heuristics)
+    daily_call_budget: int = Field(
+        1000, description="haive warns at 90% and stops at 100% (--force overrides)"
+    )
+    max_claims: int = Field(
+        10, description="claims per answer, asked of the model and shown (--all shows any extra)"
+    )
+    expand_with_tools: bool = Field(
+        True, description="the model picks expand tools (false: deterministic heuristics)"
+    )
 
 
 class WebConfig(BaseModel):
-    mode: Literal["off", "ask", "auto"] = "ask"
-    provider: Literal["auto", "tavily", "duckduckgo"] = "auto"
+    mode: Literal["off", "ask", "auto"] = Field(
+        "ask", description="off | ask (before searching) | auto; per command: --web"
+    )
+    provider: Literal["auto", "tavily", "duckduckgo"] = Field(
+        "auto", description="tavily if TAVILY_API_KEY is set, else duckduckgo"
+    )
     max_results: int = 5
 
 
@@ -198,13 +216,46 @@ def _clear_winner(key: str, close: list[str]) -> bool:
 TEMPLATE_HEADER = """\
 # haive configuration. Secrets (OPENROUTER_API_KEY, PINECONE_API_KEY, TAVILY_API_KEY)
 # belong in the environment or in .env next to this file, never here.
-# Only settings changed from their defaults are listed (README > Configuration shows them all).
-# Repos are added with `haive add`; groups are edited by hand:
+# Settings shown commented out (# key = value) are the defaults: uncomment a line to change it.
+# Defaults left commented update with haive. Repos are added with `haive add`; groups are edited by
+# hand:
 #
 # [groups]
 # valuation = ["valuation-backend", "valuation-frontend"]
 
 """
+
+# Sections written after repos/groups, most-used first. The embedding model and vector store are
+# always written out: the index was built with them, and a new default would silently mismatch it.
+SECTIONS = ("models", "limits", "web", "index", "embeddings", "vector_store")
+PINNED = ("embeddings", "vector_store")
+
+
+def toml_value(v: object) -> str:
+    """A TOML value on one line (inline tables for dicts)."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, int | float):
+        return repr(v)
+    if isinstance(v, str):
+        return json.dumps(v)  # a TOML basic string for anything JSON escapes
+    if isinstance(v, list):
+        return "[" + ", ".join(toml_value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{ " + ", ".join(f"{k} = {toml_value(x)}" for k, x in v.items()) + " }" if v else "{}"
+    raise TypeError(f"can't write {type(v).__name__} to TOML")
+
+
+def _section(name: str, current: BaseModel) -> str:
+    default = type(current)()
+    lines = [f"[{name}]"]
+    for key, info in type(current).model_fields.items():
+        value = getattr(current, key)
+        if info.description:
+            lines.append(f"# {info.description}")
+        set_ = name in PINNED or value != getattr(default, key)
+        lines.append(("" if set_ else "# ") + f"{key} = {toml_value(value)}")
+    return "\n".join(lines)
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -219,13 +270,13 @@ def load_config(path: Path | None = None) -> Config:
 def save_config(cfg: Config, path: Path | None = None) -> Path:
     path = path or paths.config_file()
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Only settings that differ from the defaults are written, so a changed default (a model list,
-    # a limit) reaches existing configs. The embedding model and vector store stay pinned: the index
-    # was built with them, and a new default would silently mismatch it.
-    data = cfg.model_dump(exclude_none=True, exclude_defaults=True)
-    data["embeddings"] = cfg.embeddings.model_dump()
-    data["vector_store"] = cfg.vector_store.model_dump()
-    path.write_text(TEMPLATE_HEADER + tomli_w.dumps(data))
+    # Settings left at their defaults are written commented out, so they're visible but a changed
+    # default (a model list, a limit) still reaches existing configs.
+    head = tomli_w.dumps(
+        {k: v for k, v in cfg.model_dump(include={"repos", "groups"}, exclude_none=True).items() if v}
+    )
+    body = "\n\n".join(_section(n, getattr(cfg, n)) for n in SECTIONS)
+    path.write_text(TEMPLATE_HEADER + (head + "\n" if head else "") + body + "\n")
     return path
 
 

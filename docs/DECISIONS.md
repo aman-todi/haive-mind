@@ -376,3 +376,10 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     `timeout_seconds` of wall-clock time; `DeadlineExceeded` sends the chain to the next model, which
     serves the rest of the question as after any failure, and `--trace` shows the abandoned attempt.
     The stalled request finishes or dies in the background (daemon threads don't hold up exit).
+
+60. **config.toml lists every setting, defaults commented out.** Writing only changed settings (#58)
+    kept defaults current but hid what could be changed, such as the tier and paid/free. `haive init`
+    and `haive add` now write every section with each setting at its default as a commented line
+    (`# use_paid = true`), with a one-line hint for the user-facing ones (from the fields'
+    descriptions); uncommenting changes it, and commented lines still pick up new defaults. Changed
+    settings, the embedding model, and the vector store are written as live lines.
