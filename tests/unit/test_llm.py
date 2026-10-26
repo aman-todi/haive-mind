@@ -146,6 +146,8 @@ def test_a_stalled_call_is_abandoned_at_the_deadline():
     t0 = time.monotonic()
     assert llm.text("answer", "hi", meter) == "ok"
     assert time.monotonic() - t0 < 2
+    llm.cfg.models.timeout_seconds, llm.cfg.models.step_timeout_seconds = 125, 30
+    assert llm.deadline_for("answer") == 125 and llm.deadline_for("router") == 30
     stalled = [e for e in meter.log if not e["ok"]]
     assert stalled[0]["model"] == "m1" and "abandoned" in stalled[0]["error"]
     assert stalled[0]["step"] == "answer" and llm.model_ids() == ["m2"]  # m2 serves the rest

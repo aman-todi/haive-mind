@@ -56,12 +56,14 @@ def _meter_of(config: RunnableConfig) -> Meter | None:
     return next((h for h in handlers if isinstance(h, Meter)), None)
 
 
-def deadline(runnable: Runnable, model_id: str, seconds: float) -> Runnable:
-    """``runnable`` with a wall-clock limit: past it, the attempt is abandoned (its daemon thread
-    finishes or dies on its own) and ``DeadlineExceeded`` sends the chain to the next model, which
-    then serves the rest of the question like after any other failure."""
+def deadline(runnable: Runnable, model_id: str, seconds_for: Callable[[str], float]) -> Runnable:
+    """``runnable`` with a wall-clock limit, ``seconds_for(step)``: past it, the attempt is abandoned
+    (its daemon thread finishes or dies on its own) and ``DeadlineExceeded`` sends the chain to the
+    next model, which then serves the rest of the question like after any other failure."""
 
     def call(inp: Any, config: RunnableConfig) -> Any:
+        step = (config.get("metadata") or {}).get("haive_step", "?")
+        seconds = seconds_for(step)
         box: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
 
         def work() -> None:
@@ -79,7 +81,7 @@ def deadline(runnable: Runnable, model_id: str, seconds: float) -> Runnable:
                 meter.log.append(
                     {
                         "type": "llm",
-                        "step": (config.get("metadata") or {}).get("haive_step", "?"),
+                        "step": step,
                         "model": model_id,
                         "ms": round(seconds * 1000),
                         "ok": False,
@@ -171,8 +173,13 @@ class LLM:
             self._models[model_id] = self.factory(model_id)
         return self._models[model_id]
 
+    def deadline_for(self, step: str) -> float:
+        """The answer may take a while; every other step returns a few hundred tokens in seconds."""
+        m = self.cfg.models
+        return m.timeout_seconds if step == "answer" else min(m.step_timeout_seconds, m.timeout_seconds)
+
     def guard(self, runnable: Runnable, model_id: str) -> Runnable:
-        return deadline(runnable, model_id, self.cfg.models.timeout_seconds)
+        return deadline(runnable, model_id, self.deadline_for)
 
     def model_ids(self) -> list[str]:
         chain = self.cfg.models.chain()

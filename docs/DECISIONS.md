@@ -383,3 +383,10 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     (`# use_paid = true`), with a one-line hint for the user-facing ones (from the fields'
     descriptions); uncommenting changes it, and commented lines still pick up new defaults. Changed
     settings, the embedding model, and the vector store are written as live lines.
+
+61. **Short steps get a 30 s deadline.** The next eval had one stall, on a router call (normally
+    ~1 s), which was abandoned at 125 s as #59 intended: 161 s for the question instead of 300+.
+    The generous limit exists so a long answer isn't cut off; the router, grader, rewrite, expand
+    planner, summaries, and titles return a few hundred tokens in 1-5 s, so 30 s
+    (`models.step_timeout_seconds`) still leaves a wide margin and a stall there costs ~95 s less.
+    Answers keep `timeout_seconds` (125 s).
