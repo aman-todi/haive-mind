@@ -7,6 +7,7 @@ table is regenerated from the latest run, so it only ever shows measured numbers
 from __future__ import annotations
 
 import csv
+import json
 import re
 import time
 from datetime import datetime
@@ -25,6 +26,7 @@ EVAL_DIR = Path(__file__).parent
 ROOT = EVAL_DIR.parent
 FULL_ABLATIONS = ["vector_only", "ripgrep_only", "hybrid", "hybrid+loop"]
 STORE_ABLATIONS = ["pinecone", "chroma"]
+SLOW_S = 60  # summary.md lists questions slower than this, with their slowest LLM call
 README_START, README_END = "<!-- eval-results:start -->", "<!-- eval-results:end -->"
 COLUMNS = [
     "intent_accuracy",
@@ -106,6 +108,20 @@ def retrieved_files(rt, q: dict[str, Any], ablation: str, store=None) -> list[tu
     return list(dict.fromkeys(files))
 
 
+def slowest_call(node_log: list[dict[str, Any]]) -> str:
+    """The question's slowest LLM call, e.g. 'answer 182.4s on m (after failed attempts: ...)'."""
+    calls = [e for e in node_log if e.get("type") == "llm"]
+    if not calls:
+        return ""
+    e = max(calls, key=lambda c: c.get("ms") or 0)
+    out = f"{e.get('step')} {(e.get('ms') or 0) / 1000:.1f}s on {e.get('model')}"
+    if not e.get("ok", True):
+        out += " (failed)"
+    if e.get("failed_attempts"):
+        out += f" (after failed attempts: {', '.join(e['failed_attempts'])})"
+    return out
+
+
 def run_full(rt, questions: list[dict[str, Any]], ablation: str, console) -> list[dict[str, Any]]:
     runner = rt.runner(ablation=ablation)
     rows = []
@@ -139,6 +155,8 @@ def run_full(rt, questions: list[dict[str, Any]], ablation: str, console) -> lis
                 )
             row["llm_calls"] = res.state.get("llm_calls", 0)
             row["latency_s"] = round(res.latency_s, 2)
+            row["node_log"] = res.state.get("node_log") or []
+            row["slowest_call"] = slowest_call(row["node_log"])
         except Exception as e:  # keep going; errors are counted in the summary
             row["error"] = f"{type(e).__name__}: {e}"[:300]
         rows.append(row)
@@ -147,7 +165,8 @@ def run_full(rt, questions: list[dict[str, Any]], ablation: str, console) -> lis
             + (
                 "[red]error[/]"
                 if row.get("error")
-                else f"intent={row.get('intent')} hit={row.get('file_hit')} recall10={row.get('recall10')}"
+                else f"intent={row.get('intent')} hit={row.get('file_hit')} recall10={row.get('recall10')} "
+                f"{row.get('latency_s')}s"
             )
         )
     return rows
@@ -270,6 +289,7 @@ def main(
     out.mkdir(parents=True, exist_ok=True)
     summaries: dict[str, dict[str, Any]] = {}
     failures: list[str] = []  # first-try verification errors by kind, per ablation
+    slow: list[str] = []  # questions over SLOW_S, with their slowest LLM call
     for ab in abls:
         rows = (
             run_full(rt, questions, ab, console)
@@ -279,12 +299,21 @@ def main(
         if not rows:
             continue
         csv_rows = [
-            {**{k: v for k, v in r.items() if k != "first_errors_list"},
+            {**{k: v for k, v in r.items() if k not in ("first_errors_list", "node_log")},
              "first_errors": " | ".join(r.get("first_errors_list") or [])}
             for r in rows
         ]  # fmt: skip
         write_csv(out / f"{ab.replace('+', '_')}.csv", csv_rows)
+        with (out / f"{ab.replace('+', '_')}_traces.jsonl").open("w") as f:  # what `--trace` would show
+            for r in rows:
+                if "node_log" in r:
+                    f.write(json.dumps({"id": r["id"], "node_log": r["node_log"]}, default=str) + "\n")
         summaries[ab] = metrics.summarize(rows)
+        slow += [
+            f"| {ab} | {r['id']} | {r['latency_s']} | {r.get('llm_calls')} | {r.get('slowest_call') or '-'} |"
+            for r in sorted(rows, key=lambda r: -(r.get("latency_s") or 0))
+            if (r.get("latency_s") or 0) > SLOW_S
+        ]
         kinds = metrics.error_kinds(rows)
         if kinds:
             failures.append(
@@ -303,6 +332,12 @@ def main(
         if failures
         else ""
     )
+    if slow:
+        errors += (
+            f"\n\n## Questions over {SLOW_S} s\n\nFull traces in `<ablation>_traces.jsonl`.\n\n"
+            "| ablation | question | latency_s | llm_calls | slowest call |\n|---|---|---|---|---|\n"
+            + "\n".join(slow)
+        )
     (out / "summary.md").write_text(f"# Eval results\n\n{header}\n\n{table}{errors}\n")
     write_csv(out / "summary.csv", [{"ablation": k, **v} for k, v in summaries.items()])
     console.print(table)

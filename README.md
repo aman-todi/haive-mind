@@ -290,7 +290,8 @@ without a token scan. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
 `haive eval` (from a source checkout) runs a question suite through the full graph and reports intent
 accuracy, file hit rate (expected files among verified refs), retrieval recall@10 before any LLM step,
 first-try citation validity, debug file+line accuracy (top hypothesis and any), LLM calls per question,
-and p50/p95 latency, plus first-try verification failures grouped by kind. Ablations: `vector_only`,
+and p50/p95 latency, plus first-try verification failures grouped by kind and the questions over 60 s with
+their slowest LLM call (each question's full trace is saved to `<ablation>_traces.jsonl`). Ablations: `vector_only`,
 `ripgrep_only`, `hybrid`, `hybrid+loop` (default), `pinecone` vs `chroma` (retrieval recall only), or
 `all`. `--paid/--free` and `--strong/--ultra` pick the tier; `--model …` runs the suite on one model
 with no fallbacks, to compare models.
@@ -314,7 +315,7 @@ Measured 2026-10-25 on `questions.yaml` (19 questions; model=deepseek/deepseek-v
 
 | ablation | intent_accuracy | file_hit_rate | recall@10 | citation_validity | debug_top1 | debug_any | llm_calls_mean | latency_p50_s | latency_p95_s | questions | errors |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| hybrid+loop | 100% | 100% | 100% | 99% | – | – | 3.58 | 13.47 | 28.76 | 19 | 0 |
+| hybrid+loop | 100% | 100% | 100% | 100% | – | – | 3.68 | 14.06 | 214.12 | 19 | 0 |
 <!-- eval-results:end -->
 
 ## Development

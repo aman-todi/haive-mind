@@ -157,12 +157,16 @@ def test_eval_on_sample(monkeypatch, tmp_path):
     assert "| hybrid+loop |" in summary and "| ripgrep_only |" in summary and "| chroma |" in summary
     assert "old" not in readme.read_text() and "| hybrid+loop |" in readme.read_text()
     import csv
+    import json
 
     rows = list(csv.DictReader((out / "hybrid_loop.csv").open()))
     assert {r["id"] for r in rows} >= {"lookup-choose-method", "debug-missing-key"}
     assert not any(r.get("error") for r in rows), [r["error"] for r in rows if r.get("error")]
     by_id = {r["id"]: r for r in rows}
     assert "first_errors" in rows[0]  # first-try verification errors, per question
+    assert "slowest_call" in rows[0] and "node_log" not in rows[0]
+    traces = [json.loads(ln) for ln in (out / "hybrid_loop_traces.jsonl").read_text().splitlines()]
+    assert {t["id"] for t in traces} == {r["id"] for r in rows} and traces[0]["node_log"]
     assert by_id["lookup-choose-method"]["recall10"] == "True"
     assert by_id["debug-missing-key"]["recall10"] == "True"  # trace frames map to the bug repo
     print(summary)
@@ -184,3 +188,22 @@ def test_first_try_errors_are_grouped_by_kind():
     ]  # fmt: skip
     assert metrics.error_kinds(rows) == {"line range outside the file": 2, "file not in the evidence": 1}
     assert metrics.error_kind("model claim must not have refs") == "wrong citation type"
+
+
+def test_slowest_call_names_the_step_model_and_retries():
+    from eval.run import slowest_call
+
+    log = [
+        {"type": "node", "node": "answer", "ms": 190000},
+        {"type": "llm", "step": "router", "model": "m", "ok": True, "ms": 1200},
+        {
+            "type": "llm",
+            "step": "answer",
+            "model": "m",
+            "ok": True,
+            "ms": 182400,
+            "failed_attempts": ["timeout"],
+        },
+    ]
+    assert slowest_call(log) == "answer 182.4s on m (after failed attempts: timeout)"
+    assert slowest_call([]) == ""
