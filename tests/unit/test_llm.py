@@ -128,6 +128,30 @@ def test_a_model_that_fails_a_call_is_skipped_for_the_rest_of_the_question():
     assert llm.model_ids() == ["m1", "m2"]  # a new question tries the first model again
 
 
+def test_a_stalled_call_is_abandoned_at_the_deadline():
+    import time
+
+    release = []
+
+    def stall(_messages):
+        while not release:  # a provider holding the connection open without answering
+            time.sleep(0.01)
+        return "too late"
+
+    m1 = FakeChatModel({"text": [stall]}, model_name="m1")
+    m2 = FakeChatModel({"text": ["ok"]}, model_name="m2")
+    llm = make({"m1": m1, "m2": m2})
+    llm.cfg.models.timeout_seconds = 0.3
+    meter = Meter()
+    t0 = time.monotonic()
+    assert llm.text("answer", "hi", meter) == "ok"
+    assert time.monotonic() - t0 < 2
+    stalled = [e for e in meter.log if not e["ok"]]
+    assert stalled[0]["model"] == "m1" and "abandoned" in stalled[0]["error"]
+    assert stalled[0]["step"] == "answer" and llm.model_ids() == ["m2"]  # m2 serves the rest
+    release.append(True)
+
+
 def test_get_model_wiring(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     cfg = Config()

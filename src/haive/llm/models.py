@@ -4,12 +4,17 @@ Built on LangChain primitives:
 - ``init_chat_model`` builds each model, with a shared ``InMemoryRateLimiter`` (client-side
   throttle) and the OpenAI client's own retries, which honor ``Retry-After`` on 429s;
 - ``.with_fallbacks()`` moves down the tier's list when a model keeps failing;
+- ``deadline()`` caps each model attempt's wall-clock time (the client's ``timeout`` only bounds the
+  wait between bytes, so a stalled provider that keeps the connection alive could hold a call for
+  minutes);
 - the ``Meter`` callback handler counts calls, enforces the per-question budget, and records usage.
 """
 
 from __future__ import annotations
 
 import os
+import queue
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -17,16 +22,22 @@ import openai
 from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseChatModel
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from pydantic import ValidationError
 
 from haive.config import Config
 from haive.db import DB
 from haive.llm.budget import BudgetExceeded, Meter
 
+
 # Errors that mean "this model didn't work out, try the next one". BudgetExceeded is deliberately
 # not here: it must stop the whole chain.
+class DeadlineExceeded(TimeoutError):
+    """A model attempt ran past ``models.timeout_seconds`` of wall-clock time."""
+
+
 RECOVERABLE: tuple[type[BaseException], ...] = (
+    DeadlineExceeded,
     openai.APIError,  # rate limits after the client's retries, 5xx, 4xx, timeouts, connection errors
     OutputParserException,
     ValidationError,
@@ -37,6 +48,51 @@ RECOVERABLE: tuple[type[BaseException], ...] = (
 
 class LLMError(RuntimeError):
     pass
+
+
+def _meter_of(config: RunnableConfig) -> Meter | None:
+    cbs = config.get("callbacks")
+    handlers = cbs if isinstance(cbs, list) else getattr(cbs, "handlers", None) or []
+    return next((h for h in handlers if isinstance(h, Meter)), None)
+
+
+def deadline(runnable: Runnable, model_id: str, seconds: float) -> Runnable:
+    """``runnable`` with a wall-clock limit: past it, the attempt is abandoned (its daemon thread
+    finishes or dies on its own) and ``DeadlineExceeded`` sends the chain to the next model, which
+    then serves the rest of the question like after any other failure."""
+
+    def call(inp: Any, config: RunnableConfig) -> Any:
+        box: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+
+        def work() -> None:
+            try:
+                box.put((True, runnable.invoke(inp, config)))
+            except BaseException as e:  # handed back to the caller's thread
+                box.put((False, e))
+
+        threading.Thread(target=work, daemon=True, name=f"llm-{model_id}").start()
+        try:
+            ok, value = box.get(timeout=seconds)
+        except queue.Empty:
+            meter = _meter_of(config)
+            if meter is not None:
+                meter.log.append(
+                    {
+                        "type": "llm",
+                        "step": (config.get("metadata") or {}).get("haive_step", "?"),
+                        "model": model_id,
+                        "ms": round(seconds * 1000),
+                        "ok": False,
+                        "error": f"no answer within {seconds:.0f} s (abandoned)",
+                        "skip": "question",
+                    }
+                )
+            raise DeadlineExceeded(f"{model_id}: no answer within {seconds:.0f} s") from None
+        if ok:
+            return value
+        raise value
+
+    return RunnableLambda(call, name=f"deadline:{model_id}")
 
 
 def get_model(model_id: str, cfg: Config, rate_limiter: InMemoryRateLimiter | None = None) -> BaseChatModel:
@@ -115,6 +171,9 @@ class LLM:
             self._models[model_id] = self.factory(model_id)
         return self._models[model_id]
 
+    def guard(self, runnable: Runnable, model_id: str) -> Runnable:
+        return deadline(runnable, model_id, self.cfg.models.timeout_seconds)
+
     def model_ids(self) -> list[str]:
         chain = self.cfg.models.chain()
         return [m for m in chain if m not in self.unavailable | self.failed] or chain
@@ -135,7 +194,7 @@ class LLM:
         ids = tuple(self.model_ids())
         cache_key = (ids, key)
         if cache_key not in self._chains:
-            runnables = [build(self.model(mid)) for mid in ids]
+            runnables = [self.guard(build(self.model(mid)), mid) for mid in ids]
             chain = runnables[0]
             if len(runnables) > 1:
                 chain = chain.with_fallbacks(runnables[1:], exceptions_to_handle=RECOVERABLE)

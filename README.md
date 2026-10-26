@@ -179,7 +179,7 @@ ultra_paid = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"
 routing = { sort = "price", preferred_max_latency = { p90 = 10 }, preferred_min_throughput = { p50 = 30 } }
 requests_per_minute = 20      # client-side throttle
 max_retries = 1               # per model (honors Retry-After) before falling back
-timeout_seconds = 125         # per request; slow answers aren't cut off
+timeout_seconds = 125         # wall-clock cap per model attempt, then the next model
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]
@@ -226,7 +226,9 @@ Each paid model is served by many providers on OpenRouter, and its default routi
 which is occasionally one that stalls for minutes. haive asks OpenRouter (`models.routing`) to prefer
 providers that start answering within 10 s (p90) and stream at least 30 tokens/s (median) over the
 last 5 minutes, and to pick the cheapest of those; slower providers are tried only after them. Set
-`routing = {}` for OpenRouter's default.
+`routing = {}` for OpenRouter's default. If a call still stalls, haive abandons it after
+`models.timeout_seconds` (125 s; normal calls take 1-30 s) and the next model in the tier answers the
+rest of the question.
 
 Answers are capped at `limits.max_claims` (10) claims: the model merges related points, and a history
 answer groups related commits into one claim per piece of work. The terminal shows at most that many (spread across sections); `--all`

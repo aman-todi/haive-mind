@@ -49,7 +49,9 @@ def make_expand(deps: Deps):
         bound = None
         if use_model:
             try:
-                runnables = [deps.llm.model(mid).bind_tools(tools) for mid in deps.llm.model_ids()]
+                runnables = [
+                    deps.llm.guard(deps.llm.model(mid).bind_tools(tools), mid) for mid in deps.llm.model_ids()
+                ]
                 bound = runnables[0].with_fallbacks(runnables[1:], exceptions_to_handle=RECOVERABLE)
             except NotImplementedError:
                 bound = None

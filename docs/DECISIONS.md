@@ -367,3 +367,12 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     consecutive hex characters with exactly one of the run's commits in that repo; elided or
     ambiguous ones still fail, and the prompt asks for shas copied whole. Eval traces also keep each
     question's final answer, so a missed expected file can be checked without a rerun.
+
+59. **A wall-clock deadline per model attempt.** With routing in place, two eval questions still
+    spent about 302 s in one answer call each, past the 125 s `timeout_seconds`: the OpenAI
+    client's timeout bounds each wait between bytes, not the request, so a provider that keeps the
+    connection open while stalling holds the call until it gives up. Each model's attempt (in
+    `LLM.with_fallbacks` and the expand planner) now runs in a daemon thread that is abandoned at
+    `timeout_seconds` of wall-clock time; `DeadlineExceeded` sends the chain to the next model, which
+    serves the rest of the question as after any failure, and `--trace` shows the abandoned attempt.
+    The stalled request finishes or dies in the background (daemon threads don't hold up exit).

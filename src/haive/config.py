@@ -95,8 +95,9 @@ class ModelsConfig(BaseModel):
     )
     requests_per_minute: int = 20  # client-side throttle for free models (OpenRouter allows ~20/min)
     max_retries: int = 1  # per model, by the OpenAI client (honors Retry-After), before falling back
-    # Per request. Generous so a slow answer isn't cut off just before it finishes; a hung request is
-    # retried once, so the worst case is ~2x this before the next model in the list.
+    # Wall-clock limit for one model's attempt at a call (normal calls take 1-30 s). Generous so a
+    # slow answer isn't cut off just before it finishes; past it the next model in the list takes
+    # over for the rest of the question. Also the client's per-read timeout.
     timeout_seconds: int = 125
 
     TIERS: ClassVar[tuple[str, ...]] = ("strong", "ultra", "strong_paid", "ultra_paid")
