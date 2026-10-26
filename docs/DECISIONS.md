@@ -398,3 +398,9 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     `load_profiles` now also reads windows around those references (up to 8 per repo, nearby
     lines in a file merged, the same ones the profile prints), so the model sees the code it is
     pointed at and its citations verify.
+
+63. **Routing prefers providers streaming 50 tokens/s, not 30.** Two evals after #57's price-first
+    routing had a median of ~20 s (12-15 s when sorting by throughput), and one lookup answer took
+    78 s on a provider that wasn't failing, just slow. A 30 tokens/s floor let slow providers win
+    on price; at 50 the cheapest preferred provider streams a typical answer in seconds. The cost
+    difference between providers of the same model stays a fraction of a cent per question.

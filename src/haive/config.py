@@ -93,14 +93,14 @@ class ModelsConfig(BaseModel):
     api_key_env: str = "OPENROUTER_API_KEY"
     # OpenRouter provider routing for paid models (the request's `provider` object). A paid model is
     # served by many providers, some of which stall for minutes. Providers that start answering within
-    # 10 s (p90) and stream at least 30 tokens/s (median) over the last 5 minutes are preferred,
+    # 10 s (p90) and stream at least 50 tokens/s (median) over the last 5 minutes are preferred,
     # cheapest first; the rest are tried after them, so a request still runs. {} restores OpenRouter's
     # default (price-weighted load balancing).
     routing: dict[str, Any] = Field(
         default_factory=lambda: {
             "sort": "price",
             "preferred_max_latency": {"p90": 10},
-            "preferred_min_throughput": {"p50": 30},
+            "preferred_min_throughput": {"p50": 50},
         }
     )
     requests_per_minute: int = 20  # client-side throttle for free models (OpenRouter allows ~20/min)

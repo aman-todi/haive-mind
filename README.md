@@ -177,7 +177,7 @@ ultra = ["nvidia/nemotron-3-ultra-550b-a55b:free", "thinkingmachines/inkling:fre
          "poolside/laguna-s-2.1:free", "openrouter/free"]
 strong_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
 ultra_paid = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
-routing = { sort = "price", preferred_max_latency = { p90 = 10 }, preferred_min_throughput = { p50 = 30 } }
+routing = { sort = "price", preferred_max_latency = { p90 = 10 }, preferred_min_throughput = { p50 = 50 } }
 requests_per_minute = 20      # client-side throttle
 max_retries = 1               # per model (honors Retry-After) before falling back
 timeout_seconds = 125         # wall-clock cap on an answer call, then the next model
@@ -226,7 +226,7 @@ train on prompts.
 
 Each paid model is served by many providers on OpenRouter, and its default routing favors the cheapest,
 which is occasionally one that stalls for minutes. haive asks OpenRouter (`models.routing`) to prefer
-providers that start answering within 10 s (p90) and stream at least 30 tokens/s (median) over the
+providers that start answering within 10 s (p90) and stream at least 50 tokens/s (median) over the
 last 5 minutes, and to pick the cheapest of those; slower providers are tried only after them. Set
 `routing = {}` for OpenRouter's default. If a call still stalls, haive abandons it after
 `models.timeout_seconds` (125 s) for an answer, or `step_timeout_seconds` (30 s) for the short steps
