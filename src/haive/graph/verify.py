@@ -136,7 +136,22 @@ def check_repo_ref(ref: RepoRef, lines_: _Lines, evidence_paths: set[tuple[str, 
     return errs
 
 
+def repair_sha(ref: CommitRef, evidence_commits: set[tuple[str, str]]) -> None:
+    """Fix a garbled sha in place when it shares a run of ``MIN_SHA`` hex characters with exactly one
+    of this run's commits in that repo (models copying many shas drop or swap characters:
+    ``b3086e546c4`` for ``b1d3086e546c``). Anything less certain is left for verification to reject."""
+    sha = ref.sha.strip().lower()
+    if any(r == ref.repo and (s.startswith(sha) or sha.startswith(s)) for r, s in evidence_commits):
+        return
+    runs = {sha[i : i + MIN_SHA] for i in range(len(sha) - MIN_SHA + 1)}
+    runs = {r for r in runs if all(ch in "0123456789abcdef" for ch in r)}
+    hits = {s for r, s in evidence_commits if r == ref.repo and any(run in s for run in runs)}
+    if len(hits) == 1:
+        ref.sha = hits.pop()
+
+
 def check_commit_ref(ref: CommitRef, evidence_commits: set[tuple[str, str]]) -> list[str]:
+    repair_sha(ref, evidence_commits)
     loc = f"{ref.repo}@{ref.sha}"
     sha = ref.sha.strip().lower()
     if len(sha) < MIN_SHA or not all(ch in "0123456789abcdef" for ch in sha):

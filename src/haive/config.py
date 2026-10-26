@@ -197,6 +197,7 @@ def _clear_winner(key: str, close: list[str]) -> bool:
 TEMPLATE_HEADER = """\
 # haive configuration. Secrets (OPENROUTER_API_KEY, PINECONE_API_KEY, TAVILY_API_KEY)
 # belong in the environment or in .env next to this file, never here.
+# Only settings changed from their defaults are listed (README > Configuration shows them all).
 # Repos are added with `haive add`; groups are edited by hand:
 #
 # [groups]
@@ -217,7 +218,12 @@ def load_config(path: Path | None = None) -> Config:
 def save_config(cfg: Config, path: Path | None = None) -> Path:
     path = path or paths.config_file()
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = cfg.model_dump(exclude_none=True)
+    # Only settings that differ from the defaults are written, so a changed default (a model list,
+    # a limit) reaches existing configs. The embedding model and vector store stay pinned: the index
+    # was built with them, and a new default would silently mismatch it.
+    data = cfg.model_dump(exclude_none=True, exclude_defaults=True)
+    data["embeddings"] = cfg.embeddings.model_dump()
+    data["vector_store"] = cfg.vector_store.model_dump()
     path.write_text(TEMPLATE_HEADER + tomli_w.dumps(data))
     return path
 

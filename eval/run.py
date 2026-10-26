@@ -156,6 +156,7 @@ def run_full(rt, questions: list[dict[str, Any]], ablation: str, console) -> lis
             row["llm_calls"] = res.state.get("llm_calls", 0)
             row["latency_s"] = round(res.latency_s, 2)
             row["node_log"] = res.state.get("node_log") or []
+            row["answer"] = ans
             row["slowest_call"] = slowest_call(row["node_log"])
         except Exception as e:  # keep going; errors are counted in the summary
             row["error"] = f"{type(e).__name__}: {e}"[:300]
@@ -299,15 +300,16 @@ def main(
         if not rows:
             continue
         csv_rows = [
-            {**{k: v for k, v in r.items() if k not in ("first_errors_list", "node_log")},
+            {**{k: v for k, v in r.items() if k not in ("first_errors_list", "node_log", "answer")},
              "first_errors": " | ".join(r.get("first_errors_list") or [])}
             for r in rows
         ]  # fmt: skip
         write_csv(out / f"{ab.replace('+', '_')}.csv", csv_rows)
-        with (out / f"{ab.replace('+', '_')}_traces.jsonl").open("w") as f:  # what `--trace` would show
+        with (out / f"{ab.replace('+', '_')}_traces.jsonl").open("w") as f:  # the answer and its --trace
             for r in rows:
                 if "node_log" in r:
-                    f.write(json.dumps({"id": r["id"], "node_log": r["node_log"]}, default=str) + "\n")
+                    rec = {"id": r["id"], "answer": r.get("answer"), "node_log": r["node_log"]}
+                    f.write(json.dumps(rec, default=str) + "\n")
         summaries[ab] = metrics.summarize(rows)
         slow += [
             f"| {ab} | {r['id']} | {r['latency_s']} | {r.get('llm_calls')} | {r.get('slowest_call') or '-'} |"
@@ -334,7 +336,7 @@ def main(
     )
     if slow:
         errors += (
-            f"\n\n## Questions over {SLOW_S} s\n\nFull traces in `<ablation>_traces.jsonl`.\n\n"
+            f"\n\n## Questions over {SLOW_S} s\n\nAnswers and full traces in `<ablation>_traces.jsonl`.\n\n"
             "| ablation | question | latency_s | llm_calls | slowest call |\n|---|---|---|---|---|\n"
             + "\n".join(slow)
         )

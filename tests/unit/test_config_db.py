@@ -18,6 +18,14 @@ def test_config_roundtrip(tmp_path):
     assert loaded.groups == {"g": ["a"]}
     assert loaded.limits.max_llm_calls_per_question == 25
     assert "api_key =" not in p.read_text()  # secrets never land in config.toml
+    text = p.read_text()
+    assert "[models]" not in text and "max_claims" not in text  # defaults aren't frozen into the file
+    assert "[embeddings]" in text and "jina-embeddings" in text  # but the index's embedding model is
+    c.limits.max_claims = 6
+    c.models.strong = ["m"]
+    loaded = load_config(save_config(c, p))
+    assert loaded.limits.max_claims == 6 and loaded.models.strong == ["m"]
+    assert loaded.limits.max_llm_calls_per_question == 25 and loaded.models.use_paid
 
 
 def test_resolve_names_fuzzy_and_groups():

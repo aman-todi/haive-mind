@@ -248,3 +248,19 @@ def test_claims_shown_are_capped_across_sections():
     out = con.export_text()
     assert "a2" in out and "a3" not in out and "… 2 more" in out
     assert "4 more claim(s) not shown; --all shows every claim." in out
+
+
+def test_garbled_commit_sha_is_repaired_only_when_unambiguous():
+    from haive.graph.verify import check_commit_ref
+    from haive.types import CommitRef
+
+    commits = {("w", "b1d3086e546c"), ("w", "3563677aa01b"), ("w", "d4b9f00c1e2a")}
+    ref = CommitRef(repo="w", sha="b3086e546c4")  # two characters dropped, one added
+    assert check_commit_ref(ref, commits) == [] and ref.sha == "b1d3086e546c"
+    assert check_commit_ref(CommitRef(repo="w", sha="3563677"), commits) == []  # a prefix is fine as is
+    short = CommitRef(repo="w", sha="d4b...")
+    assert "not a commit sha" in check_commit_ref(short, commits)[0] and short.sha == "d4b..."
+    other = CommitRef(repo="x", sha="b3086e546c4")  # same characters, different repo: no match
+    assert "not among the retrieved evidence" in check_commit_ref(other, commits)[0]
+    placeholder = CommitRef(repo="w", sha="0000000")
+    assert "not among the retrieved evidence" in check_commit_ref(placeholder, commits)[0]

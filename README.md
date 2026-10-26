@@ -142,7 +142,9 @@ questions at 100% unless `--force`.
 ## Configuration
 
 `config.toml` (with `.env` beside it) lives in `~/.config/haive/` on Linux and
-`~/Library/Application Support/haive/` on macOS, or in `$HAIVE_HOME/config/` if set:
+`~/Library/Application Support/haive/` on macOS, or in `$HAIVE_HOME/config/` if set. haive writes
+only the settings that differ from the defaults (plus the embedding model and vector store, which the
+index depends on), so new defaults reach you on upgrade. Every setting, with its default:
 
 ```toml
 [repos.valuation-backend]
@@ -291,7 +293,7 @@ without a token scan. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
 accuracy, file hit rate (expected files among verified refs), retrieval recall@10 before any LLM step,
 first-try citation validity, debug file+line accuracy (top hypothesis and any), LLM calls per question,
 and p50/p95 latency, plus first-try verification failures grouped by kind and the questions over 60 s with
-their slowest LLM call (each question's full trace is saved to `<ablation>_traces.jsonl`). Ablations: `vector_only`,
+their slowest LLM call (each question's answer and full trace are saved to `<ablation>_traces.jsonl`). Ablations: `vector_only`,
 `ripgrep_only`, `hybrid`, `hybrid+loop` (default), `pinecone` vs `chroma` (retrieval recall only), or
 `all`. `--paid/--free` and `--strong/--ultra` pick the tier; `--model …` runs the suite on one model
 with no fallbacks, to compare models.

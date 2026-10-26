@@ -164,9 +164,10 @@ def test_eval_on_sample(monkeypatch, tmp_path):
     assert not any(r.get("error") for r in rows), [r["error"] for r in rows if r.get("error")]
     by_id = {r["id"]: r for r in rows}
     assert "first_errors" in rows[0]  # first-try verification errors, per question
-    assert "slowest_call" in rows[0] and "node_log" not in rows[0]
+    assert "slowest_call" in rows[0] and "node_log" not in rows[0] and "answer" not in rows[0]
     traces = [json.loads(ln) for ln in (out / "hybrid_loop_traces.jsonl").read_text().splitlines()]
     assert {t["id"] for t in traces} == {r["id"] for r in rows} and traces[0]["node_log"]
+    assert traces[0]["answer"]["summary"]
     assert by_id["lookup-choose-method"]["recall10"] == "True"
     assert by_id["debug-missing-key"]["recall10"] == "True"  # trace frames map to the bug repo
     print(summary)

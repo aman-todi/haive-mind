@@ -127,8 +127,7 @@ def make_verify(deps: Deps):
         update: dict[str, Any] = {"verify_errors": res.errors, "bad_claims": res.bad_claims}
         if a.suggested_fix is not None:
             a.suggested_fix.approximate = res.approximate_fix
-        if a.suggested_fix is not None or res.relabeled:
-            update["answer"] = a.model_dump()
+        update["answer"] = a.model_dump()  # verify may relabel claims and repair commit shas in place
         if state.get("answer_retries", 0) == 0:
             keys = claim_keys(a)
             repo_claims = [k for k, c in keys if c.source == "repo"]
