@@ -1,0 +1,17 @@
+ERROR:mcp.server.lowlevel.server:Error calling tool query_closet_items
+Traceback (most recent call last):
+  File "/opt/venv/lib/python3.12/site-packages/app/mcp_server/tools.py", line 427, in query_closet_items
+    return await safe_query.run_where_clause(user_id, where_clause)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/app/safe_query.py", line 527, in run_where_clause
+    async with readonly_transaction() as conn:
+               ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/app/db.py", line 121, in readonly_transaction
+    async with readonly_pool().acquire() as conn:
+               ^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/app/db.py", line 87, in readonly_pool
+    raise RuntimeError(
+RuntimeError: READONLY_DATABASE_URL is not configured; the safe query path is unavailable

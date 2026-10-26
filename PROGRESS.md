@@ -21,10 +21,9 @@ Status of the build against [docs/spec.md](docs/spec.md); design changes since t
 
 ## Open
 
-- **T15 hardening:** `eval/questions.yaml` has 19 questions over intrinsic-valuation, technical-req-rag,
-  weatherpruf, hnsw-engine, and CSE477-WebAppDev (expected files from verified runs; two marked CHECK).
-  Confirm those, add the other repos and debug cases, and re-run after the relabeling and symbol-check
-  changes (DECISIONS #52) to confirm first-try citations improve.
+- **T15 hardening:** `eval/questions.yaml` has 21 questions over intrinsic-valuation, technical-req-rag,
+  weatherpruf, hnsw-engine, and CSE477-WebAppDev, all expected files confirmed, including 2 debug cases
+  (hand-written traces against the current code). Add the other repos and more debug cases.
 - Re-measure the free strong tier with its new models (Nemotron 3.5 Super VL, Gemma 4 26B A4B).
 
 ## Measurements

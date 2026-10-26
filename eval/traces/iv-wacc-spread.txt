@@ -1,0 +1,20 @@
+saq.job ERROR Error processing job build:9f2c41d7 (ticker=KO, model=fcff)
+Traceback (most recent call last):
+  File "/app/app/jobs/build_job.py", line 401, in _pipeline
+    result: ValuationResult = await asyncio.to_thread(
+                              ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/concurrent/futures/thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/app/app/valuation/fcff.py", line 444, in compute
+    outcome = run_fcff(inp)
+  File "/app/app/valuation/fcff.py", line 290, in run_fcff
+    _check_spread(r, gT, "WACC")
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/app/app/valuation/fcff.py", line 152, in _check_spread
+    raise ValuationError(
+    ...<2 lines>...
+    )
+app.valuation.base.ValuationError: WACC (0.0410) - terminal growth (0.0400) is below 0.005; terminal value is undefined/unstable

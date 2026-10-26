@@ -12,9 +12,8 @@
 #   expected_files: [valuation-backend/app/valuation/dcf.py]
 
 # Draft by Claude Code (Oct 2026). Expected files come from citations that passed verification in
-# real runs; lines marked CHECK came from commit file lists and should be confirmed. haive-mind
-# itself is not indexed (`haive add --scan` skips it), so no questions are about it. Add questions
-# for your other repos (auditbuddy, earnings-call-analysis, ...) and debug cases from bug injection.
+# real runs. haive-mind itself is not indexed (`haive add --scan` skips it), so no questions are
+# about it. Add questions for your other repos (auditbuddy, earnings-call-analysis, ...).
 # History questions cite commits (no file), so they leave expected_files empty and score intent only.
 
 # ---------------------------------------------------------------- lookup
@@ -42,8 +41,13 @@
   question: How does weatherpruf enforce the sign-up cap?
   repos: [weatherpruf]
   expected_intent: lookup
-  expected_files: [weatherpruf/backend/app/services/admission.py, weatherpruf/backend/app/api/deps.py]
-  notes: CHECK paths (from commit a90247e's file list)
+  expected_files:
+    - weatherpruf/backend/app/services/admission.py
+    - weatherpruf/backend/app/api/deps.py
+    - weatherpruf/backend/app/config.py
+    - weatherpruf/frontend/src/pages/CapacityNotice.tsx
+    - weatherpruf/docs/architecture.md
+  notes: confirmed by the author
 - id: lookup-weatherpruf-mcp-auth
   question: Where does the MCP server validate OAuth tokens?
   repos: [weatherpruf]
@@ -117,8 +121,35 @@
   question: Break down how weatherpruf is deployed
   repos: [weatherpruf]
   expected_intent: architecture
-  expected_files: [weatherpruf/infra/README.md, weatherpruf/.github/workflows/deploy.yml]
-  notes: CHECK paths (from commits 7bb8367 and 60e4438)
+  expected_files:
+    - weatherpruf/docs/architecture.md
+    - weatherpruf/infra/README.md
+    - weatherpruf/infra/Dockerfile
+    - weatherpruf/.github/workflows/deploy.yml
+    - weatherpruf/backend/app/main.py
+    - weatherpruf/backend/app/static.py
+  notes: confirmed by the author
+
+# ---------------------------------------------------------------- debug
+# Hand-written traces against the current code (real paths and line numbers as the Docker images
+# lay them out), for failures caused by configuration or input rather than a code change, so the
+# repos stay untouched. expected_line is where the error is raised.
+- id: debug-iv-wacc-spread
+  question: Why did this valuation build fail?
+  repos: [intrinsic-valuation]
+  trace_file: eval/traces/iv-wacc-spread.txt
+  expected_intent: debug
+  expected_files: [intrinsic-valuation/backend/app/valuation/fcff.py]
+  expected_line: 152
+  notes: the worker's FCFF run rejects a WACC within 0.5 pp of terminal growth; the fix is in the inputs
+- id: debug-wp-readonly-pool
+  question: Why does the query_closet_items tool fail?
+  repos: [weatherpruf]
+  trace_file: eval/traces/wp-readonly-pool.txt
+  expected_intent: debug
+  expected_files: [weatherpruf/backend/app/db.py]
+  expected_line: 87
+  notes: READONLY_DATABASE_URL isn't set, so connect() skipped the read-only pool (db.py:61)
 
 # ---------------------------------------------------------------- general
 - id: general-fastapi-pagination
