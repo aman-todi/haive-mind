@@ -21,6 +21,27 @@ from haive.tools import files
 from haive.types import Evidence, RepoProfile
 
 ARCH_QUERY = "architecture overview services deploy configuration entrypoint how components connect"
+PROFILE_SITES = 8  # code windows around the profile's routes and called URLs, per repo
+
+
+def profile_sites(prof: RepoProfile, shown: int = 15) -> list[tuple[str, int, int]]:
+    """``(path, start, end)`` windows around the routes and URLs the profile lists as ``file:line``
+    (the first ``shown`` of each, as ``profile_summary`` prints them), so the code those references
+    point at is evidence the answer can cite. Nearby lines in a file share one window."""
+    by_file: dict[str, list[int]] = {}
+    for ref in prof.routes_defined[:shown] + prof.urls_called[:shown]:
+        by_file.setdefault(ref["file"], []).append(int(ref["line"]))
+    out: list[tuple[str, int, int]] = []
+    for path, lines in by_file.items():
+        lines = sorted(set(lines))
+        first = last = lines[0]
+        for ln in lines[1:]:
+            if ln - last > 20:
+                out.append((path, first - 2, last + 6))
+                first = ln
+            last = ln
+        out.append((path, first - 2, last + 6))
+    return out[:PROFILE_SITES]
 
 
 # ---------------------------------------------------------------- compare
@@ -105,13 +126,17 @@ def make_load_profiles(deps: Deps):
             indexed = [p for _, p in deps.db.indexed_paths([repo])]
             readmes = [p for p in indexed if p.lower() in ("readme.md", "readme", "readme.rst")]
             tf = [p for p in indexed if p.endswith(".tf")][:2]
-            for path in dict.fromkeys(readmes[:1] + key_files + tf):
+            windows = [
+                (p, 1, 80, "architecture key file") for p in dict.fromkeys(readmes[:1] + key_files + tf)
+            ]
+            windows += [(p, a, b, "route / URL from the repo profile") for p, a, b in profile_sites(prof)]
+            for path, start, end, why in windows:
                 try:
-                    snip = files.read_range(roots[repo], path, 1, 80)
+                    snip = files.read_range(roots[repo], path, start, end)
                 except files.FileAccessError:
                     continue
                 if snip:
-                    evs.append(ev_from_snippet(repo, snip, "tool", "architecture key file"))
+                    evs.append(ev_from_snippet(repo, snip, "tool", why))
             if deps.use_vector:
                 evs += vector_evidence(
                     deps,

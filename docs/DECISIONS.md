@@ -390,3 +390,11 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     planner, summaries, and titles return a few hundred tokens in 1-5 s, so 30 s
     (`models.step_timeout_seconds`) still leaves a wide margin and a stall there costs ~95 s less.
     Answers keep `timeout_seconds` (125 s).
+
+62. **The code behind the repo profile's references is architecture evidence.** In the eval after
+    #61, all five first-try failures were one architecture answer citing real files at real lines
+    (`Program.cs:39`, `requirementsApi.ts:89`) that verification rejected as not retrieved: the
+    profile lists routes and called URLs as `file:line`, but only the profile text was evidence.
+    `load_profiles` now also reads windows around those references (up to 8 per repo, nearby
+    lines in a file merged, the same ones the profile prints), so the model sees the code it is
+    pointed at and its citations verify.

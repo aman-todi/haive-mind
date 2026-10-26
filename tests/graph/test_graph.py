@@ -665,6 +665,9 @@ def test_architecture_single_repo_skips_summaries(cfg, db, store):
     res = r.run("Break down the valuation app", thread_id="t")
     assert "RepoSummary" not in fake.calls and "connect_map" in nodes(res)
     assert any(e["id"] == "profile:valuation" for e in res.state["evidence"])
+    # the code behind the profile's route / URL references is evidence, so those citations verify
+    sites = [e for e in res.state["evidence"] if e["why"] == "route / URL from the repo profile"]
+    assert sites and all(e["path"] and e["start_line"] for e in sites)
 
 
 def test_freshness_reindexes_inline(cfg, db, store, sample_repo):

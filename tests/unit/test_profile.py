@@ -19,3 +19,19 @@ def test_profile(sample_repo):
     assert any(u["url"].startswith("/users/") for u in p.urls_called)
     text = profile_summary(p)
     assert "compose service web" in text and "routes defined" in text
+
+
+def test_profile_sites_are_windows_around_routes_and_urls():
+    from haive.graph.fanout import profile_sites
+    from haive.types import RepoProfile
+
+    prof = RepoProfile(
+        repo="r",
+        routes_defined=[
+            {"method": "POST", "path": "/a", "file": "api.py", "line": 10},
+            {"method": "GET", "path": "/b", "file": "api.py", "line": 18},
+            {"method": "GET", "path": "/c", "file": "api.py", "line": 90},
+        ],
+        urls_called=[{"url": "/a", "file": "client.ts", "line": 22}],
+    )
+    assert profile_sites(prof) == [("api.py", 8, 24), ("api.py", 88, 96), ("client.ts", 20, 28)]
