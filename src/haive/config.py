@@ -56,17 +56,17 @@ class ModelsConfig(BaseModel):
     tier: Literal["strong", "ultra"] = Field(
         "strong", description="strong | ultra (bigger, slower models); per command: --strong / --ultra"
     )
-    # Paid answers in ~14 s for well under a cent a question; free is ~4.5x slower (p50 ~60 s) at
-    # about the same accuracy (README, Models).
+    # On the author's suite paid answers in ~15-20 s (median) for well under a cent a question; free
+    # is ~5x slower (~90 s) at the same accuracy (README, Models).
     use_paid: bool = Field(
         True,
-        description="paid models (~14 s, under a cent a question) or free (~60 s); per command: --paid / --free",
+        description="paid models (~15-20 s, under a cent a question) or free (~90 s); per command: --paid / --free",
     )
     strong: list[str] = Field(
         default_factory=lambda: [
             "nvidia/nemotron-3.5-super-vl:free",
-            "google/gemma-4-26b-a4b-it:free",
-            "google/gemma-4-31b-it:free",
+            "xingchen-agi/xing4.0-29b-a4b:free",
+            "cohere/north-mini-code:free",
             "openrouter/free",
         ]
     )

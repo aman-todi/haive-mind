@@ -411,5 +411,12 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     abandoned attempt wasting the time spent. Free models are several times slower than paid ones,
     so their limits are now `free_timeout_factor` (2) times the paid ones: 250 s for an answer and
     60 s for other steps, applied to both the wall-clock deadline and the client's timeout. (Both
-    Gemma 4 models also failed every call that run with 429 "rate-limited upstream"; replacing
-    them was proposed separately.)
+    Gemma 4 models also failed every call that run with 429 "rate-limited upstream"; see #65.)
+
+65. **Free strong list: Gemma out, Xing 4.0 and North Mini Code in.** In the same free run both
+    Gemma 4 models failed all 18 calls they got with 429 "temporarily rate-limited upstream": Google
+    AI Studio's free quota, shared by every OpenRouter user, was spent (their 30-minute uptime read
+    0%). So each Super VL timeout also cost two instant failures before `openrouter/free` answered.
+    Super VL stays first (every answer it finished verified); the Gemmas are replaced by Xing 4.0
+    29B-A4B (Phala, ~4B active, structured outputs) and Cohere North Mini Code (~3B active,
+    code-tuned), each from a different provider and at 100% uptime when chosen.
