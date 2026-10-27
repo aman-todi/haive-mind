@@ -420,3 +420,10 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     Super VL stays first (every answer it finished verified); the Gemmas are replaced by Xing 4.0
     29B-A4B (Phala, ~4B active, structured outputs) and Cohere North Mini Code (~3B active,
     code-tuned), each from a different provider and at 100% uptime when chosen.
+
+66. **Free strong tier: `openrouter/free` first; no separate free time limits.** #64's doubled limits
+    and #65's ordering are replaced by a simpler list: `openrouter/free` (which routes each call to
+    whichever free model is available, so specific free models' outages and quotas matter less),
+    then Nemotron 3.5 Super VL and Xing 4.0 29B-A4B as fallbacks. Naming two real models also shows
+    users the format for putting a preferred free model first. Free and paid share one set of time
+    limits again; `free_timeout_factor` is removed.

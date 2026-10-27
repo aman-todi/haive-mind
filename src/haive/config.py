@@ -64,10 +64,9 @@ class ModelsConfig(BaseModel):
     )
     strong: list[str] = Field(
         default_factory=lambda: [
+            "openrouter/free",  # OpenRouter picks an available free model
             "nvidia/nemotron-3.5-super-vl:free",
             "xingchen-agi/xing4.0-29b-a4b:free",
-            "cohere/north-mini-code:free",
-            "openrouter/free",
         ]
     )
     ultra: list[str] = Field(
@@ -112,9 +111,6 @@ class ModelsConfig(BaseModel):
     )
     step_timeout_seconds: int = Field(
         30, description="limit for every other call: router, grader, rewrite, expand, titles (normally 1-5 s)"
-    )
-    free_timeout_factor: float = Field(
-        2, description="free models get the limits above times this (they're several times slower)"
     )
 
     TIERS: ClassVar[tuple[str, ...]] = ("strong", "ultra", "strong_paid", "ultra_paid")

@@ -171,8 +171,8 @@ batch_size = 8
 tier = "strong"               # or "ultra"; per command: --strong / --ultra
 use_paid = true               # per command: --paid / --free
 # One list answers every step of a question; later entries are fallbacks, in order.
-strong = ["nvidia/nemotron-3.5-super-vl:free", "xingchen-agi/xing4.0-29b-a4b:free",
-          "cohere/north-mini-code:free", "openrouter/free"]
+strong = ["openrouter/free", "nvidia/nemotron-3.5-super-vl:free",
+          "xingchen-agi/xing4.0-29b-a4b:free"]
 ultra = ["nvidia/nemotron-3-ultra-550b-a55b:free", "thinkingmachines/inkling:free",
          "poolside/laguna-s-2.1:free", "openrouter/free"]
 strong_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
@@ -182,7 +182,6 @@ requests_per_minute = 20      # client-side throttle
 max_retries = 1               # per model (honors Retry-After) before falling back
 timeout_seconds = 125         # wall-clock cap on an answer call, then the next model
 step_timeout_seconds = 30     # the same for router, grader, rewrite, expand, titles
-free_timeout_factor = 2       # free models get twice these limits
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]
@@ -215,7 +214,7 @@ provider down) is skipped for the rest of the process.
 |---|---|---|---|---|
 | strong-paid (default) | `deepseek/deepseek-v4.1-flash-1017` ($0.15 / $0.60 per 1M tokens) | `openai/gpt-oss-120b` ($0.15 / $0.60) | | `openrouter/auto` |
 | ultra-paid (`--ultra`) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98) | `z-ai/glm-5.2` ($0.62 / $2.42) | | `openrouter/auto` |
-| strong, free (`--free`) | `nvidia/nemotron-3.5-super-vl:free` | `xingchen-agi/xing4.0-29b-a4b:free` | `cohere/north-mini-code:free` | `openrouter/free` |
+| strong, free (`--free`) | `openrouter/free` | `nvidia/nemotron-3.5-super-vl:free` | `xingchen-agi/xing4.0-29b-a4b:free` | |
 | ultra, free (`--free --ultra`) | `nvidia/nemotron-3-ultra-550b-a55b:free` | `thinkingmachines/inkling:free` | `poolside/laguna-s-2.1:free` | `openrouter/free` |
 
 **Paid or free?** On the author's 19-question suite (October 2026), strong-paid and strong-free were
@@ -232,17 +231,17 @@ providers that start answering within 10 s (p90) and stream at least 50 tokens/s
 last 5 minutes, and to pick the cheapest of those; slower providers are tried only after them. Set
 `routing = {}` for OpenRouter's default. If a call still stalls, haive abandons it after
 `models.timeout_seconds` (125 s) for an answer, or `step_timeout_seconds` (30 s) for the short steps
-that normally take 1-5 s (twice as long for free models, `free_timeout_factor`), and the next model in
-the tier answers the rest of the question.
+that normally take 1-5 s, and the next model in the tier answers the rest of the question.
 
 Answers are capped at `limits.max_claims` (10) claims: the model merges related points, and a history
 answer groups related commits into one claim per piece of work. The terminal shows at most that many (spread across sections); `--all`
 shows any extra, and `--json` always includes every claim.
 
 Fallbacks are mostly served by other providers than the model before them, so one provider's outage
-rarely takes a tier down. Free picks favor speed over size: Nemotron 3.5 Super VL (12B active of 120B), then two small
-mixture-of-experts models from other providers, Xing 4.0 29B-A4B and Cohere's code-tuned North Mini
-Code (3-4B active). Picks were checked against OpenRouter's live model list and provider uptime in
+rarely takes a tier down. The free strong tier starts with `openrouter/free`, which hands each call to whichever free model
+is available, so it rarely needs a fallback; the two named models after it (Nemotron 3.5 Super VL,
+whose answers all verified on the author's suite, and the fast Xing 4.0 29B-A4B) are the fallbacks
+and show the format for putting your own preferred free model first. Picks were checked against OpenRouter's live model list and provider uptime in
 October 2026; free models come and go, so check the list before relying on them, and use
 `haive eval --model …` to compare models on your own questions. A typical question makes 3-4 calls
 (router, grader, answer); on strong-paid that is well under a cent, on ultra-paid roughly $0.01-0.03. Paid models also avoid the free tier's rate limits, and you can choose providers that don't

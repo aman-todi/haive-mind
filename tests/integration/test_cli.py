@@ -248,11 +248,14 @@ def test_tier_flags_pick_one_model_list(cli, sample_repo):
     cli.built.clear()
     cli("ask", q, "--json", "--free")
     assert strong_paid not in cli.built and ultra_paid not in cli.built
-    assert "nvidia/nemotron-3.5-super-vl:free" in cli.built
+    assert "openrouter/free" in cli.built
     cli("ask", q, "--json", "--ultra")
     assert ultra_paid in cli.built
     status = cli("status").output
-    assert "default: strong, paid" in status and "strong: nvidia/nemotron-3.5-super-vl:free → " in status
+    assert (
+        "default: strong, paid" in status
+        and "strong: openrouter/free → nvidia/nemotron-3.5-super-vl:free" in status
+    )
 
 
 def test_batch_add_scan_and_multiple_paths(cli, sample_repo, other_repo, tmp_path):
