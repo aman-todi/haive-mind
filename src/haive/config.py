@@ -7,7 +7,7 @@ import json
 import os
 import tomllib
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, Literal, get_args
 
 import tomli_w
 from pydantic import BaseModel, Field
@@ -49,42 +49,36 @@ class EmbeddingsConfig(BaseModel):
     batch_size: int = Field(8, description="lower it if indexing runs out of memory")
 
 
+Tier = Literal["free", "strong", "ultra"]
+TIERS: tuple[str, ...] = get_args(Tier)
+
+
 class ModelsConfig(BaseModel):
     """One model answers every step of a question (router, grader, expand, answer, ...). Each tier is
     an ordered list: the first model that works is used, the rest are fallbacks."""
 
-    tier: Literal["strong", "ultra"] = Field(
-        "strong", description="strong | ultra (bigger, slower models); per command: --strong / --ultra"
-    )
-    # On the author's suite paid answers in ~15-20 s (median) for well under a cent a question; free
+    # On the author's suite strong answers in ~15-20 s (median) for well under a cent a question; free
     # is ~5x slower (~90 s) at the same accuracy (README, Models).
-    use_paid: bool = Field(
-        True,
-        description="paid models (~15-20 s, under a cent a question) or free (~90 s); per command: --paid / --free",
+    tier: Tier = Field(
+        "strong",
+        description="free (~90 s a question) | strong (paid, ~15-20 s, under a cent) | ultra (paid, bigger, "
+        "slower); per command: --tier",
     )
-    strong: list[str] = Field(
+    free: list[str] = Field(
         default_factory=lambda: [
             "openrouter/free",  # OpenRouter picks an available free model
             "nvidia/nemotron-3.5-super-vl:free",
             "xingchen-agi/xing4.0-29b-a4b:free",
         ]
     )
-    ultra: list[str] = Field(
-        default_factory=lambda: [
-            "nvidia/nemotron-3-ultra-550b-a55b:free",
-            "thinkingmachines/inkling:free",
-            "poolside/laguna-s-2.1:free",
-            "openrouter/free",
-        ]
-    )
-    strong_paid: list[str] = Field(
+    strong: list[str] = Field(
         default_factory=lambda: [
             "deepseek/deepseek-v4.1-flash-1017",
             "openai/gpt-oss-120b",
             "openrouter/auto",
         ]
     )
-    ultra_paid: list[str] = Field(
+    ultra: list[str] = Field(
         default_factory=lambda: ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
     )
     base_url: str = "https://openrouter.ai/api/v1"
@@ -113,14 +107,8 @@ class ModelsConfig(BaseModel):
         30, description="limit for every other call: router, grader, rewrite, expand, titles (normally 1-5 s)"
     )
 
-    TIERS: ClassVar[tuple[str, ...]] = ("strong", "ultra", "strong_paid", "ultra_paid")
-
-    @property
-    def tier_name(self) -> str:
-        return f"{self.tier}{'_paid' if self.use_paid else ''}"
-
     def chain(self) -> list[str]:
-        return list(getattr(self, self.tier_name))
+        return list(getattr(self, self.tier))
 
 
 class LimitsConfig(BaseModel):

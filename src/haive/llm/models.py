@@ -147,8 +147,8 @@ def make_rate_limiter(requests_per_minute: int) -> InMemoryRateLimiter | None:
 class LLM:
     """Entry point for all LLM calls. ``factory`` builds a model from an id (tests inject fakes).
 
-    Every call in a question uses the same chain: the configured tier's list (strong or ultra, free or
-    paid). ``step`` (router, grade, answer, ...) only labels the call in --trace and usage stats."""
+    Every call in a question uses the same chain: the configured tier's list (free, strong, or
+    ultra). ``step`` (router, grade, answer, ...) only labels the call in --trace and usage stats."""
 
     def __init__(
         self, cfg: Config, db: DB | None = None, factory: Callable[[str], BaseChatModel] | None = None

@@ -13,8 +13,8 @@ Status of the build against [docs/spec.md](docs/spec.md); design changes since t
   and paid OpenRouter models. Changes driven by those runs: commit citations, history time windows,
   clarify-or-assume for vague questions, response time above answers, freshness after the router,
   one model list per question by tier, and skipping models that fail or disappear (DECISIONS #25–#38).
-- Eval (19 questions, Oct 2026): strong-paid 100% intent / file hits / recall@10, 99% first-try
-  citations, p50 13.5 s; strong-free about as accurate but p50 63 s. Paid became the default and
+- Eval (19 questions, Oct 2026): strong (paid) 100% intent / file hits / recall@10, 99% first-try
+  citations, p50 13.5 s; free about as accurate but p50 63 s. Paid became the default and
   combined grade-and-answer was dropped (DECISIONS #51–#53).
 - CI: `ruff` + `pytest` on Ubuntu and macOS, Python 3.11 and 3.12. Tests never touch the network;
   the fake LLM is a real `BaseChatModel`, and a CLI test asserts indexed repos are left untouched.
@@ -32,7 +32,7 @@ Status of the build against [docs/spec.md](docs/spec.md); design changes since t
 |---|---|
 | Freshness check, one repo (~110 files) | p50 16 ms (target ≤ 200 ms) |
 | Index on CPU, fastembed `jina-embeddings-v2-base-code` | ~1.6 chunks/s, peak RSS 3.7 GB (4-core container) |
-| History question, weatherpruf, `--paid` | 27 s, 3 LLM calls, all claims verified |
+| History question, weatherpruf, paid models | 27 s, 3 LLM calls, all claims verified |
 
 ## Known issues / risks
 

@@ -18,7 +18,6 @@ class Out(BaseModel):
 def cfg_for() -> Config:
     cfg = Config()
     cfg.models.requests_per_minute = 0
-    cfg.models.use_paid = False
     cfg.models.strong = ["m1", "m2"]
     return cfg
 
@@ -107,15 +106,12 @@ def test_text_and_fallback():
 def test_one_list_per_tier():
     cfg = cfg_for()
     llm = LLM(cfg, None, factory_for(FakeChatModel()))
-    assert llm.model_ids() == ["m1", "m2"]  # tier "strong", free: every step uses this list
+    assert llm.model_ids() == ["m1", "m2"]  # tier "strong" (the default): every step uses this list
     cfg.models.tier = "ultra"
-    assert llm.model_ids()[0] == "nvidia/nemotron-3-ultra-550b-a55b:free"
-    assert llm.model_ids()[-1] == "openrouter/free"
-    cfg.models.use_paid = True
     assert llm.model_ids() == ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
-    cfg.models.tier = "strong"
-    assert llm.model_ids()[0] == "deepseek/deepseek-v4.1-flash-1017"
-    assert Config().models.tier_name == "strong_paid"  # the default: paid, strong
+    cfg.models.tier = "free"
+    assert llm.model_ids()[0] == "openrouter/free"
+    assert Config().models.chain()[0] == "deepseek/deepseek-v4.1-flash-1017"  # default tier: strong
 
 
 def test_a_model_that_fails_a_call_is_skipped_for_the_rest_of_the_question():

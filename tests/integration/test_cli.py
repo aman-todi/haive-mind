@@ -239,22 +239,22 @@ def test_add_validation(cli, sample_repo, tmp_path):
     assert cli("add", str(sample_repo), "--name", "bad:name", ok=False).exit_code == 1
 
 
-def test_tier_flags_pick_one_model_list(cli, sample_repo):
+def test_tier_option_picks_one_model_list(cli, sample_repo):
     setup_repo(cli, sample_repo)
     q = "Where does the DCF choose a valuation method?"
-    strong_paid, ultra_paid = "deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4-pro-0813"
+    strong, ultra = "deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4-pro-0813"
     cli("ask", q, "--json")
-    assert strong_paid in cli.built and ultra_paid not in cli.built  # default: every step on strong, paid
+    assert strong in cli.built and ultra not in cli.built  # default: every step on the strong list
     cli.built.clear()
-    cli("ask", q, "--json", "--free")
-    assert strong_paid not in cli.built and ultra_paid not in cli.built
-    assert "openrouter/free" in cli.built
-    cli("ask", q, "--json", "--ultra")
-    assert ultra_paid in cli.built
+    cli("ask", q, "--json", "--tier", "free")
+    assert "openrouter/free" in cli.built and strong not in cli.built and ultra not in cli.built
+    cli("ask", q, "--json", "-t", "ultra")
+    assert ultra in cli.built
+    assert cli("ask", q, "--tier", "fast", ok=False).exit_code == 1
     status = cli("status").output
     assert (
-        "default: strong, paid" in status
-        and "strong: openrouter/free → nvidia/nemotron-3.5-super-vl:free" in status
+        "default tier: strong" in status
+        and "free: openrouter/free → nvidia/nemotron-3.5-super-vl:free" in status
     )
 
 

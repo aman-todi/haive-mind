@@ -67,8 +67,8 @@ These need you, not the tool:
 1. **Pinecone** (default vector store): create a free account and an API key, and set `PINECONE_API_KEY`.
    `haive init` creates the index. Prefer everything local? Use `haive init --backend chroma` (install the
    `chroma` extra) and skip Pinecone entirely.
-2. **OpenRouter**: set `OPENROUTER_API_KEY` and add a few dollars of credit (paid models are the
-   default; see [Models](#models) for the cost, or set `use_paid = false` for free models only), and
+2. **OpenRouter**: set `OPENROUTER_API_KEY` and add a few dollars of credit (the default `strong`
+   tier uses paid models; see [Models](#models) for the cost, or set `tier = "free"`), and
    **review OpenRouter's privacy and data-policy settings**: some providers may log or train on prompts,
    and your code goes into prompts. See [docs/PRIVACY.md](docs/PRIVACY.md).
 3. **Model IDs**: check that the default models in `config.toml` still exist on
@@ -109,9 +109,9 @@ haive index [names...] [--full]             no names = all registered repos; inc
 haive sync                                  git pull --ff-only on every repo, then incremental index
 haive status                                vector store, model tiers, today's LLM usage, index health
 
-haive ask "<question>"  [-r REPO]... [-g GROUP]... [--web off|ask|auto] [--json] [--trace] [--all] [--strong|--ultra] [--paid|--free]
-haive debug [FILE|-]    [-q "extra question"] [-r/-g ...] [--web ...] [--json] [--trace] [--all] [--strong|--ultra] [--paid|--free]
-haive chat              [--resume ID] [-r/-g ...] [--web ...] [--all] [--strong|--ultra] [--paid|--free]
+haive ask "<question>"  [-r REPO]... [-g GROUP]... [--web off|ask|auto] [--json] [--trace] [--all] [--tier free|strong|ultra]
+haive debug [FILE|-]    [-q "extra question"] [-r/-g ...] [--web ...] [--json] [--trace] [--all] [--tier ...]
+haive chat              [--resume ID] [-r/-g ...] [--web ...] [--all] [--tier ...]
 haive threads           [--limit N]
 haive threads delete <ID>
 haive eval              [--suite FILE] [--ablation NAME] [--model MODEL] [--limit N] [--setup-sample]
@@ -168,15 +168,11 @@ model = "jinaai/jina-embeddings-v2-base-code"   # 768-d, runs locally via fastem
 batch_size = 8
 
 [models]                      # OpenRouter model IDs (any OpenAI-compatible endpoint works)
-tier = "strong"               # or "ultra"; per command: --strong / --ultra
-use_paid = true               # per command: --paid / --free
+tier = "strong"               # free | strong | ultra; per command: --tier
 # One list answers every step of a question; later entries are fallbacks, in order.
-strong = ["openrouter/free", "nvidia/nemotron-3.5-super-vl:free",
-          "xingchen-agi/xing4.0-29b-a4b:free"]
-ultra = ["nvidia/nemotron-3-ultra-550b-a55b:free", "thinkingmachines/inkling:free",
-         "poolside/laguna-s-2.1:free", "openrouter/free"]
-strong_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
-ultra_paid = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
+free = ["openrouter/free", "nvidia/nemotron-3.5-super-vl:free", "xingchen-agi/xing4.0-29b-a4b:free"]
+strong = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
+ultra = ["deepseek/deepseek-v4-pro-0813", "z-ai/glm-5.2", "openrouter/auto"]
 routing = { sort = "price", preferred_max_latency = { p90 = 10 }, preferred_min_throughput = { p50 = 50 } }
 requests_per_minute = 20      # client-side throttle
 max_retries = 1               # per model (honors Retry-After) before falling back
@@ -205,23 +201,22 @@ model, about 600 MB, downloaded once), `clones/`, and `chroma/`.
 ## Models
 
 One model answers every step of a question (router, grader, expand planner, answer, titles). You pick
-a **tier**: strong or ultra (bigger, slower), paid or free. Each tier is an ordered list; the first model that works is
-used, and a model that fails a call (timeout, rate limit, server error) is skipped for the rest of that
+a **tier**: `free`, `strong` (the default, paid), or `ultra` (paid, bigger and slower). Each tier is an
+ordered list; the first model that works is used, and a model that fails a call (timeout, rate limit, server error) is skipped for the rest of that
 question, so a question never mixes models by accident. A model that answers 404 (removed, or its only
 provider down) is skipped for the rest of the process.
 
 | Tier | 1st | 2nd | 3rd | Last resort |
 |---|---|---|---|---|
-| strong-paid (default) | `deepseek/deepseek-v4.1-flash-1017` ($0.15 / $0.60 per 1M tokens) | `openai/gpt-oss-120b` ($0.15 / $0.60) | | `openrouter/auto` |
-| ultra-paid (`--ultra`) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98) | `z-ai/glm-5.2` ($0.62 / $2.42) | | `openrouter/auto` |
-| strong, free (`--free`) | `openrouter/free` | `nvidia/nemotron-3.5-super-vl:free` | `xingchen-agi/xing4.0-29b-a4b:free` | |
-| ultra, free (`--free --ultra`) | `nvidia/nemotron-3-ultra-550b-a55b:free` | `thinkingmachines/inkling:free` | `poolside/laguna-s-2.1:free` | `openrouter/free` |
+| `free` (`--tier free`) | `openrouter/free` | `nvidia/nemotron-3.5-super-vl:free` | `xingchen-agi/xing4.0-29b-a4b:free` | |
+| `strong` (default) | `deepseek/deepseek-v4.1-flash-1017` ($0.15 / $0.60 per 1M tokens) | `openai/gpt-oss-120b` ($0.15 / $0.60) | | `openrouter/auto` |
+| `ultra` (`--tier ultra`) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98) | `z-ai/glm-5.2` ($0.62 / $2.42) | | `openrouter/auto` |
 
-**Paid or free?** On the author's 19-question suite (October 2026), strong-paid and strong-free were
-equally accurate (100% intent, file hits, and first-try citations), but paid answered in **15-20 s at
+**Free or strong?** On the author's 19-question suite (October 2026), the two were equally accurate
+(100% intent, file hits, and first-try citations), but strong answered in **15-20 s at
 the median (about 30 s p95)** against free's **88 s (280 s p95)**, using about 3.4 LLM calls a question
 instead of 5.3: free models are slower and fail over more often (rate limits, timeouts). The whole
-suite costs about 1-2 cents on paid and 5 minutes, against 40 minutes free. Free costs nothing, but
+suite costs about 1-2 cents on strong and 5 minutes, against 40 minutes free. Free costs nothing, but
 expect a minute or two a question, OpenRouter's free rate limits, and providers that may train on
 prompts.
 
@@ -238,13 +233,13 @@ answer groups related commits into one claim per piece of work. The terminal sho
 shows any extra, and `--json` always includes every claim.
 
 Fallbacks are mostly served by other providers than the model before them, so one provider's outage
-rarely takes a tier down. The free strong tier starts with `openrouter/free`, which hands each call to whichever free model
+rarely takes a tier down. The free tier starts with `openrouter/free`, which hands each call to whichever free model
 is available, so it rarely needs a fallback; the two named models after it (Nemotron 3.5 Super VL,
 whose answers all verified on the author's suite, and the fast Xing 4.0 29B-A4B) are the fallbacks
 and show the format for putting your own preferred free model first. Picks were checked against OpenRouter's live model list and provider uptime in
 October 2026; free models come and go, so check the list before relying on them, and use
 `haive eval --model …` to compare models on your own questions. A typical question makes 3-4 calls
-(router, grader, answer); on strong-paid that is well under a cent, on ultra-paid roughly $0.01-0.03. Paid models also avoid the free tier's rate limits, and you can choose providers that don't
+(router, grader, answer); on strong that is well under a cent, on ultra roughly $0.01-0.03. Paid models also avoid the free tier's rate limits, and you can choose providers that don't
 train on prompts. `openrouter/auto` picks a paid model for you, so its cost per call varies.
 
 ## How it works
@@ -286,7 +281,7 @@ without a token scan. Details: [docs/PRIVACY.md](docs/PRIVACY.md).
 - **No patch application.** Debug suggests a unified diff and checks that its context lines exist in the
   file (else it's labeled "approximate"), but never writes it.
 - **No code execution**, no call-graph analysis, no MCP server or web UI, no native Windows.
-- **Free-tier rate limits** (with `--free`): OpenRouter free models allow about 20 requests/minute and
+- **Free-tier rate limits** (with `--tier free`): OpenRouter free models allow about 20 requests/minute and
   1,000/day; haive throttles to stay under that, so answers can pause briefly under load.
 - **Embedding speed on CPU**: the default code embedding model is accurate but heavy. Measured on a 4-core
   cloud container with no GPU: about 1.6 chunks/s, with a 3.7 GB peak (713 chunks in 7.5 minutes). The
@@ -302,7 +297,7 @@ first-try citation validity, debug file+line accuracy (top hypothesis and any), 
 and p50/p95 latency, plus first-try verification failures grouped by kind and the questions over 60 s with
 their slowest LLM call (each question's answer and full trace are saved to `<ablation>_traces.jsonl`). Ablations: `vector_only`,
 `ripgrep_only`, `hybrid`, `hybrid+loop` (default), `pinecone` vs `chroma` (retrieval recall only), or
-`all`. `--paid/--free` and `--strong/--ultra` pick the tier; `--model …` runs the suite on one model
+`all`. `--tier` picks the tier; `--model …` runs the suite on one model
 with no fallbacks, to compare models.
 
 Debug cases come from **bug injection into temp copies, never your repos**: `eval/inject_bugs.py` clones a

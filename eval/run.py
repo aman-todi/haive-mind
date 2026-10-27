@@ -272,7 +272,7 @@ def main(
 
         return _setup(rt, console)
     if model:
-        setattr(rt.cfg.models, rt.cfg.models.tier_name, [model])
+        setattr(rt.cfg.models, rt.cfg.models.tier, [model])
     path = Path(suite) if suite else EVAL_DIR / "questions.yaml"
     if not path.is_absolute() and not path.exists():
         path = ROOT / path
@@ -322,7 +322,7 @@ def main(
                 f"### {ab}\n\n| kind | count |\n|---|---|\n"
                 + "\n".join(f"| {k} | {n} |" for k, n in kinds.items())
             )
-    models = f"model={rt.cfg.models.chain()[0]}"
+    models = f"tier={rt.cfg.models.tier}; model={rt.cfg.models.chain()[0]}"
     header = (
         f"Measured {datetime.now():%Y-%m-%d} on `{path.name}` ({len(questions)} questions; {models}; "
         f"store={rt.cfg.vector_store.backend}; embeddings={rt.cfg.embeddings.model})."

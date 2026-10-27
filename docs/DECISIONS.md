@@ -434,3 +434,10 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     and interleaved statements returned another thread's row. `DB.q`, `DB.x`, and a new
     `DB.transaction()` (used by indexing too) now hold one lock; a test hammering the database from
     8 threads failed without it.
+
+68. **Three tiers: free, strong, ultra.** Strong/ultra crossed with paid/free made four lists and two
+    flag pairs, but nobody needs a "big free" tier: the free list's first entry, `openrouter/free`,
+    picks whatever free model is available anyway. The tiers are now `free` (the former free strong
+    list), `strong` (the former strong-paid list, the default), and `ultra` (former ultra-paid);
+    `use_paid`, the per-combination list names, and the `--paid/--free`, `--strong/--ultra` flags
+    are replaced by `models.tier` and one `--tier` option on ask, debug, chat, and eval.

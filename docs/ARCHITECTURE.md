@@ -71,7 +71,7 @@ flowchart TD
   V -->|ok or retries spent| FN[finalize<br/>code] --> END([end])
 ```
 
-- **Models**: one tier's list (strong or ultra, paid or free) serves every LLM call in a question; later
+- **Models**: one tier's list (free, strong, or ultra) serves every LLM call in a question; later
   entries are fallbacks. A model that fails a call is skipped for the rest of the question, and one that
   answers 404 for the rest of the process (`llm/models.py`).
 - **Budget guard**: every LLM-calling node gets a meter capped at the calls left for the question.
