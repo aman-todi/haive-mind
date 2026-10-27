@@ -404,3 +404,12 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     78 s on a provider that wasn't failing, just slow. A 30 tokens/s floor let slow providers win
     on price; at 50 the cheapest preferred provider streams a typical answer in seconds. The cost
     difference between providers of the same model stays a fraction of a cent per question.
+
+64. **Free models get twice the time limits.** The first free eval with the #53 list matched paid on
+    accuracy (100% across the board) but took 88 s at the median (280 s p95). Nemotron 3.5 Super VL
+    answered in a median 35 s yet ran into the 125 s answer deadline on 6 of 34 answers, each
+    abandoned attempt wasting the time spent. Free models are several times slower than paid ones,
+    so their limits are now `free_timeout_factor` (2) times the paid ones: 250 s for an answer and
+    60 s for other steps, applied to both the wall-clock deadline and the client's timeout. (Both
+    Gemma 4 models also failed every call that run with 429 "rate-limited upstream"; replacing
+    them was proposed separately.)

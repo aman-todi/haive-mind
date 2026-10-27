@@ -106,7 +106,7 @@ def get_model(model_id: str, cfg: Config, rate_limiter: InMemoryRateLimiter | No
         "model_provider": m.provider,
         "temperature": 0,
         "max_retries": m.max_retries,
-        "timeout": m.timeout_seconds,
+        "timeout": m.timeout_seconds * (m.free_timeout_factor if is_free(model_id) else 1),
     }
     if rate_limiter is not None and is_free(model_id):  # paid models aren't held to the free tier's limit
         kwargs["rate_limiter"] = rate_limiter
@@ -173,13 +173,15 @@ class LLM:
             self._models[model_id] = self.factory(model_id)
         return self._models[model_id]
 
-    def deadline_for(self, step: str) -> float:
-        """The answer may take a while; every other step returns a few hundred tokens in seconds."""
+    def deadline_for(self, step: str, model_id: str = "") -> float:
+        """The answer may take a while; every other step returns a few hundred tokens in seconds.
+        Free models, several times slower, get ``free_timeout_factor`` times as long."""
         m = self.cfg.models
-        return m.timeout_seconds if step == "answer" else min(m.step_timeout_seconds, m.timeout_seconds)
+        base = m.timeout_seconds if step == "answer" else min(m.step_timeout_seconds, m.timeout_seconds)
+        return base * (m.free_timeout_factor if is_free(model_id) else 1)
 
     def guard(self, runnable: Runnable, model_id: str) -> Runnable:
-        return deadline(runnable, model_id, self.deadline_for)
+        return deadline(runnable, model_id, lambda step: self.deadline_for(step, model_id))
 
     def model_ids(self) -> list[str]:
         chain = self.cfg.models.chain()

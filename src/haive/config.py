@@ -113,6 +113,9 @@ class ModelsConfig(BaseModel):
     step_timeout_seconds: int = Field(
         30, description="limit for every other call: router, grader, rewrite, expand, titles (normally 1-5 s)"
     )
+    free_timeout_factor: float = Field(
+        2, description="free models get the limits above times this (they're several times slower)"
+    )
 
     TIERS: ClassVar[tuple[str, ...]] = ("strong", "ultra", "strong_paid", "ultra_paid")
 

@@ -182,6 +182,7 @@ requests_per_minute = 20      # client-side throttle
 max_retries = 1               # per model (honors Retry-After) before falling back
 timeout_seconds = 125         # wall-clock cap on an answer call, then the next model
 step_timeout_seconds = 30     # the same for router, grader, rewrite, expand, titles
+free_timeout_factor = 2       # free models get twice these limits
 base_url = "https://openrouter.ai/api/v1"
 
 [limits]
@@ -230,7 +231,8 @@ providers that start answering within 10 s (p90) and stream at least 50 tokens/s
 last 5 minutes, and to pick the cheapest of those; slower providers are tried only after them. Set
 `routing = {}` for OpenRouter's default. If a call still stalls, haive abandons it after
 `models.timeout_seconds` (125 s) for an answer, or `step_timeout_seconds` (30 s) for the short steps
-that normally take 1-5 s, and the next model in the tier answers the rest of the question.
+that normally take 1-5 s (twice as long for free models, `free_timeout_factor`), and the next model in
+the tier answers the rest of the question.
 
 Answers are capped at `limits.max_claims` (10) claims: the model merges related points, and a history
 answer groups related commits into one claim per piece of work. The terminal shows at most that many (spread across sections); `--all`

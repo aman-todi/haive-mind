@@ -148,6 +148,8 @@ def test_a_stalled_call_is_abandoned_at_the_deadline():
     assert time.monotonic() - t0 < 2
     llm.cfg.models.timeout_seconds, llm.cfg.models.step_timeout_seconds = 125, 30
     assert llm.deadline_for("answer") == 125 and llm.deadline_for("router") == 30
+    assert llm.deadline_for("answer", "m:free") == 250 and llm.deadline_for("grade", "openrouter/free") == 60
+    assert llm.deadline_for("answer", "deepseek/deepseek-v4.1-flash-1017") == 125
     stalled = [e for e in meter.log if not e["ok"]]
     assert stalled[0]["model"] == "m1" and "abandoned" in stalled[0]["error"]
     assert stalled[0]["step"] == "answer" and llm.model_ids() == ["m2"]  # m2 serves the rest
@@ -159,7 +161,7 @@ def test_get_model_wiring(monkeypatch):
     cfg = Config()
     limiter = make_rate_limiter(20)
     model = get_model("nvidia/nemotron-3-super-120b-a12b:free", cfg, limiter)
-    assert model.max_retries == 1 and model.request_timeout == 125  # client retries honor Retry-After
+    assert model.max_retries == 1 and model.request_timeout == 250  # free: twice the paid limit
     assert model.rate_limiter is limiter and isinstance(limiter, InMemoryRateLimiter)
     assert model.openai_api_base == "https://openrouter.ai/api/v1"
     assert model.default_headers["X-Title"] == "haive-mind"
@@ -169,6 +171,7 @@ def test_get_model_wiring(monkeypatch):
     assert paid.extra_body["provider"]["sort"] == "price"  # cheapest among the responsive providers
     assert paid.extra_body["provider"]["preferred_max_latency"] == {"p90": 10}
     assert paid.rate_limiter is None
+    assert paid.request_timeout == 125
     cfg.models.routing = {}
     assert not get_model("deepseek/deepseek-v4.1-flash-1017", cfg).extra_body  # OpenRouter's default
 
