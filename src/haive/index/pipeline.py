@@ -145,7 +145,7 @@ class Indexer:
         if ids:
             self.store.delete(ids)
         stats.chunks_deleted += len([i for i in ids if ":commit:" not in i])
-        with self.db.conn:
+        with self.db.transaction():
             self.db.conn.execute("DELETE FROM chunks WHERE repo=?", (name,))
             self.db.conn.execute("DELETE FROM files WHERE repo=?", (name,))
             self.db.conn.execute("DELETE FROM commits WHERE repo=?", (name,))
@@ -181,7 +181,7 @@ class Indexer:
             dels = [i for _, _, _, _, old in pending_rows for i in old]
             if dels:
                 self.store.delete(dels)
-            with self.db.conn:
+            with self.db.transaction():
                 for path, info, sha, chunks, _old in pending_rows:
                     self.db.conn.execute(
                         "DELETE FROM chunks WHERE repo=? AND path=? AND kind!='commit'", (name, path)

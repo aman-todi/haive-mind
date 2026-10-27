@@ -427,3 +427,10 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     then Nemotron 3.5 Super VL and Xing 4.0 29B-A4B as fallbacks. Naming two real models also shows
     users the format for putting a preferred free model first. Free and paid share one set of time
     limits again; `free_timeout_factor` is removed.
+
+67. **The SQLite connection is locked.** CI failed once in `test_architecture_group` with
+    `json.loads(None)` in `get_profile`: two `summarize_repo` branches ran in parallel on the one
+    shared connection (`check_same_thread=False`) while LLM-call threads (#59) recorded usage on it,
+    and interleaved statements returned another thread's row. `DB.q`, `DB.x`, and a new
+    `DB.transaction()` (used by indexing too) now hold one lock; a test hammering the database from
+    8 threads failed without it.

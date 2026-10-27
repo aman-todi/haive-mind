@@ -58,3 +58,31 @@ def test_usage_accounting(db):
     rows = {(r["step"], r["model"]): r for r in db.usage_today()}
     assert rows[("router", "m1")]["prompt_tokens"] == 20
     assert rows[("router", "m1")]["errors"] == 1
+
+
+def test_db_is_safe_to_share_across_threads(tmp_path):
+    # The graph's parallel branches and the LLM-call threads share one connection.
+    import threading
+
+    db = DB(tmp_path / "h.db")
+    for r in ("a", "b"):
+        db.save_profile(r, {"repo": r, "n": 0})
+    errors: list[BaseException] = []
+
+    def work(repo: str) -> None:
+        try:
+            for i in range(200):
+                db.record_usage("summary", "m")
+                prof = db.get_profile(repo)
+                assert prof is not None and prof["repo"] == repo
+                db.save_profile(repo, {"repo": repo, "n": i})
+        except BaseException as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=work, args=(r,)) for r in ("a", "b") * 4]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, errors[0]
+    assert db.calls_today() == 1600

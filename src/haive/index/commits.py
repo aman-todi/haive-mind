@@ -105,7 +105,7 @@ def index_commits(db: DB, store: VectorStore, repo: str, root: Path, max_commits
         if old:
             store.delete([commit_id(repo, s) for s in old])
             stats.removed += len(old)
-            with db.conn:
+            with db.transaction():
                 db.conn.execute("DELETE FROM commits WHERE repo=?", (repo,))
                 db.conn.execute("DELETE FROM chunks WHERE repo=? AND kind='commit'", (repo,))
         new = read_commits(root, repo, max_commits, rev=stats.head)
@@ -113,7 +113,7 @@ def index_commits(db: DB, store: VectorStore, repo: str, root: Path, max_commits
     chunks = [commit_chunk(ci) for ci in new]
     if chunks:
         store.upsert(chunks)
-    with db.conn:
+    with db.transaction():
         for ci, ch in zip(new, chunks, strict=True):
             db.conn.execute(
                 "INSERT OR REPLACE INTO commits VALUES(?,?,?,?,?,?,?,?)",
@@ -145,7 +145,7 @@ def prune(db: DB, store: VectorStore, repo: str, max_commits: int) -> int:
     if not shas:
         return 0
     store.delete([commit_id(repo, s) for s in shas])
-    with db.conn:
+    with db.transaction():
         for s in shas:
             db.conn.execute("DELETE FROM commits WHERE repo=? AND sha=?", (repo, s))
             db.conn.execute("DELETE FROM chunks WHERE id=?", (commit_id(repo, s),))

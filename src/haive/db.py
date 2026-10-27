@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -48,7 +51,11 @@ class DB:
             path = paths.db_file()
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
+        # One connection shared by the graph's parallel branches and LLM-call threads, so every use
+        # goes through ``_lock`` (q, x, transaction): interleaved statements on one connection can
+        # return another thread's rows.
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
+        self._lock = threading.RLock()
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.migrate()
@@ -77,11 +84,18 @@ class DB:
         self.conn.close()
 
     def q(self, sql: str, args: tuple | list = ()) -> list[sqlite3.Row]:
-        return self.conn.execute(sql, args).fetchall()
+        with self._lock:
+            return self.conn.execute(sql, args).fetchall()
 
     def x(self, sql: str, args: tuple | list = ()) -> None:
-        with self.conn:
-            self.conn.execute(sql, args)
+        with self.transaction() as conn:
+            conn.execute(sql, args)
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Statements in one transaction, holding the connection lock throughout."""
+        with self._lock, self.conn:
+            yield self.conn
 
     # ------------------------------------------------------------ repos
 
@@ -105,7 +119,7 @@ class DB:
     def delete_repo(self, name: str) -> list[str]:
         """Delete all rows for a repo. Returns the chunk ids that were removed."""
         ids = [r["id"] for r in self.q("SELECT id FROM chunks WHERE repo=?", (name,))]
-        with self.conn:
+        with self.transaction():
             for table in ("files", "chunks", "commits"):
                 self.conn.execute(f"DELETE FROM {table} WHERE repo=?", (name,))
             self.conn.execute("DELETE FROM repo_profiles WHERE repo=?", (name,))
