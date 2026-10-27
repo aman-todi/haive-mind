@@ -404,3 +404,14 @@ Choices made where the spec was ambiguous or a dependency had moved. Newest last
     78 s on a provider that wasn't failing, just slow. A 30 tokens/s floor let slow providers win
     on price; at 50 the cheapest preferred provider streams a typical answer in seconds. The cost
     difference between providers of the same model stays a fraction of a cent per question.
+
+64. **Free strong list: Gemma out, Xing 4.0 and North Mini Code in.** The first free eval with the
+    #53 list matched paid on accuracy (100% across the board) but took 88 s at the median (280 s
+    p95). Per-model traces showed why: Nemotron 3.5 Super VL answered in a median 35 s but ran into
+    the 125 s deadline on 6 of 34 answers, and both Gemma 4 models then failed every call (18 of 18)
+    with 429 "temporarily rate-limited upstream": Google AI Studio's free quota, shared by all
+    OpenRouter users, was spent (their 30-minute uptime read 0%). Each timeout therefore cost two
+    instant failures before `openrouter/free` answered. Super VL stays first (every answer it
+    finished verified); the Gemmas are replaced by Xing 4.0 29B-A4B (Phala, ~4B active, structured
+    outputs) and Cohere North Mini Code (~3B active, code-tuned), each from a different provider and
+    at 100% uptime when chosen.

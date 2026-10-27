@@ -171,8 +171,8 @@ batch_size = 8
 tier = "strong"               # or "ultra"; per command: --strong / --ultra
 use_paid = true               # per command: --paid / --free
 # One list answers every step of a question; later entries are fallbacks, in order.
-strong = ["nvidia/nemotron-3.5-super-vl:free", "google/gemma-4-26b-a4b-it:free",
-          "google/gemma-4-31b-it:free", "openrouter/free"]
+strong = ["nvidia/nemotron-3.5-super-vl:free", "xingchen-agi/xing4.0-29b-a4b:free",
+          "cohere/north-mini-code:free", "openrouter/free"]
 ultra = ["nvidia/nemotron-3-ultra-550b-a55b:free", "thinkingmachines/inkling:free",
          "poolside/laguna-s-2.1:free", "openrouter/free"]
 strong_paid = ["deepseek/deepseek-v4.1-flash-1017", "openai/gpt-oss-120b", "openrouter/auto"]
@@ -214,15 +214,16 @@ provider down) is skipped for the rest of the process.
 |---|---|---|---|---|
 | strong-paid (default) | `deepseek/deepseek-v4.1-flash-1017` ($0.15 / $0.60 per 1M tokens) | `openai/gpt-oss-120b` ($0.15 / $0.60) | | `openrouter/auto` |
 | ultra-paid (`--ultra`) | `deepseek/deepseek-v4-pro-0813` ($0.66 / $1.98) | `z-ai/glm-5.2` ($0.62 / $2.42) | | `openrouter/auto` |
-| strong, free (`--free`) | `nvidia/nemotron-3.5-super-vl:free` | `google/gemma-4-26b-a4b-it:free` | `google/gemma-4-31b-it:free` | `openrouter/free` |
+| strong, free (`--free`) | `nvidia/nemotron-3.5-super-vl:free` | `xingchen-agi/xing4.0-29b-a4b:free` | `cohere/north-mini-code:free` | `openrouter/free` |
 | ultra, free (`--free --ultra`) | `nvidia/nemotron-3-ultra-550b-a55b:free` | `thinkingmachines/inkling:free` | `poolside/laguna-s-2.1:free` | `openrouter/free` |
 
 **Paid or free?** On the author's 19-question suite (October 2026), strong-paid and strong-free were
-about equally accurate (100% vs 94% file hits, 99% vs 98% first-try citations), but paid answered in
-**13.5 s at the median (29 s p95)** against free's **63 s (176 s p95)**, using 3.6 LLM calls a question
-instead of 5.3 (free models fail over more often). The whole suite cost about 1-2 cents on paid. Free
-costs nothing, but expect a minute a question, OpenRouter's free rate limits, and providers that may
-train on prompts.
+equally accurate (100% intent, file hits, and first-try citations), but paid answered in **15-20 s at
+the median (about 30 s p95)** against free's **88 s (280 s p95)**, using about 3.4 LLM calls a question
+instead of 5.3: free models are slower and fail over more often (rate limits, timeouts). The whole
+suite costs about 1-2 cents on paid and 5 minutes, against 40 minutes free. Free costs nothing, but
+expect a minute or two a question, OpenRouter's free rate limits, and providers that may train on
+prompts.
 
 Each paid model is served by many providers on OpenRouter, and its default routing favors the cheapest,
 which is occasionally one that stalls for minutes. haive asks OpenRouter (`models.routing`) to prefer
@@ -237,8 +238,9 @@ answer groups related commits into one claim per piece of work. The terminal sho
 shows any extra, and `--json` always includes every claim.
 
 Fallbacks are mostly served by other providers than the model before them, so one provider's outage
-rarely takes a tier down. Free picks favor speed over size: Nemotron 3.5 Super VL (12B active of 120B)
-and Gemma 4 26B A4B (4B active, faster than the dense 31B at similar quality). Picks were checked against OpenRouter's live model list and provider uptime in
+rarely takes a tier down. Free picks favor speed over size: Nemotron 3.5 Super VL (12B active of 120B), then two small
+mixture-of-experts models from other providers, Xing 4.0 29B-A4B and Cohere's code-tuned North Mini
+Code (3-4B active). Picks were checked against OpenRouter's live model list and provider uptime in
 October 2026; free models come and go, so check the list before relying on them, and use
 `haive eval --model …` to compare models on your own questions. A typical question makes 3-4 calls
 (router, grader, answer); on strong-paid that is well under a cent, on ultra-paid roughly $0.01-0.03. Paid models also avoid the free tier's rate limits, and you can choose providers that don't
