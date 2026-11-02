@@ -153,6 +153,9 @@ def test_eval_on_sample(monkeypatch, tmp_path):
         results_dir=tmp_path / "results",
         readme=readme,
     )
+    shown = con.export_text()
+    chain = " → ".join(load_config().models.chain())
+    assert shown.count("Tier: ") == 1 and f"Tier: strong → {chain}" in shown  # once, before any question
     summary = (out / "summary.md").read_text()
     assert "| hybrid+loop |" in summary and "| ripgrep_only |" in summary and "| chroma |" in summary
     assert "old" not in readme.read_text() and "| hybrid+loop |" in readme.read_text()

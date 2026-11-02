@@ -273,6 +273,11 @@ def main(
         return _setup(rt, console)
     if model:
         setattr(rt.cfg.models, rt.cfg.models.tier, [model])
+    m = rt.cfg.models
+    console.print(
+        f"[bold]Tier:[/] {m.tier} → {' → '.join(m.chain())}"
+        + (" (--model: no fallbacks)" if model else " (first model that works; the rest are fallbacks)")
+    )
     path = Path(suite) if suite else EVAL_DIR / "questions.yaml"
     if not path.is_absolute() and not path.exists():
         path = ROOT / path
